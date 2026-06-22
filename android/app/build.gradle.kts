@@ -27,18 +27,24 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("../keystore/release.keystore")
-            storePassword = "123"
-            keyAlias = "123"
-            keyPassword = "123"
-            storeType = "PKCS12"
+            val keystoreFile = file("../keystore/release.keystore")
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = "123"
+                keyAlias = "123"
+                keyPassword = "123"
+                storeType = "PKCS12"
+            }
         }
     }
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             isShrinkResources = false
+            val customKeystore = signingConfigs.getByName("release")
+            if (customKeystore.storeFile?.exists() == true) {
+                signingConfig = customKeystore
+            }
         }
     }
 }

@@ -85,9 +85,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-release
-          path: |
-            build/windows/runner/Release/
-            !build/windows/runner/Release/*.exp
-            !build/windows/runner/Release/*.lib
-            !build/windows/runner/Release/*.pdb
+          path: build/windows/runner/Release/
           retention-days: 30
