@@ -1,0 +1,51 @@
+name: md_editor
+description: A cross-platform Markdown editor built with Flutter
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  
+  # Markdown rendering
+  flutter_markdown: ^0.6.18+3
+  markdown: ^7.1.1
+  
+  # Code highlighting
+  flutter_highlighter: ^0.1.1
+  highlighter: ^0.1.1
+  
+  # Math formulas
+  flutter_math_fork: ^0.7.2
+  
+  # File operations
+  file_picker: ^6.1.1
+  path_provider: ^2.1.1
+  share_plus: ^7.2.1
+  
+  # Image picking
+  image_picker: ^1.0.4
+  
+  # Local storage
+  shared_preferences: ^2.2.2
+  
+  # Window management (desktop)
+  window_manager: ^0.3.7
+  
+  # Utils
+  intl: ^0.18.1
+  uuid: ^4.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
