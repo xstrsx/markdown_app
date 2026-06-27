@@ -28,7 +28,7 @@ class _HistoryPageState extends State<HistoryPage> {
     });
 
     final history = await HistoryService.getHistory();
-    
+
     setState(() {
       _history = history;
       _isLoading = false;
@@ -47,19 +47,19 @@ class _HistoryPageState extends State<HistoryPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('File Details'),
+        title: const Text('文件详情'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildDetailRow('Name', file.name),
+            _buildDetailRow('名称', file.name),
             const SizedBox(height: 8),
-            _buildDetailRow('Path', file.path),
+            _buildDetailRow('路径', file.path),
             const SizedBox(height: 8),
-            _buildDetailRow('Size', FileService.formatFileSize(file.size)),
+            _buildDetailRow('大小', FileService.formatFileSize(file.size)),
             const SizedBox(height: 8),
             _buildDetailRow(
-              'Last Modified',
+              '最后修改',
               DateFormat('yyyy-MM-dd HH:mm:ss').format(file.lastModified),
             ),
           ],
@@ -67,7 +67,7 @@ class _HistoryPageState extends State<HistoryPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
+            child: const Text('关闭'),
           ),
         ],
       ),
@@ -96,19 +96,19 @@ class _HistoryPageState extends State<HistoryPage> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete History'),
-        content: Text('Remove "${file.name}" from history?'),
+        title: const Text('删除历史'),
+        content: Text('从历史中删除"${file.name}"？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: const Text('取消'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
+            child: const Text('删除'),
           ),
         ],
       ),
@@ -129,7 +129,7 @@ class _HistoryPageState extends State<HistoryPage> {
           children: [
             ListTile(
               leading: const Icon(Icons.info_outline),
-              title: const Text('View File Details'),
+              title: const Text('查看文件详情'),
               onTap: () {
                 Navigator.of(context).pop();
                 _showFileDetails(file);
@@ -137,7 +137,7 @@ class _HistoryPageState extends State<HistoryPage> {
             ),
             ListTile(
               leading: const Icon(Icons.share),
-              title: const Text('Share File'),
+              title: const Text('分享文件'),
               onTap: () {
                 Navigator.of(context).pop();
                 FileService.shareFile(file.path);
@@ -145,7 +145,7 @@ class _HistoryPageState extends State<HistoryPage> {
             ),
             ListTile(
               leading: const Icon(Icons.folder),
-              title: const Text('Open File Location'),
+              title: const Text('打开文件所在位置'),
               onTap: () {
                 Navigator.of(context).pop();
                 FileService.openFileLocation(file.path);
@@ -158,7 +158,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 color: Theme.of(context).colorScheme.error,
               ),
               title: Text(
-                'Delete from History',
+                '从历史中删除',
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
               onTap: () {
@@ -176,29 +176,29 @@ class _HistoryPageState extends State<HistoryPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('History'),
+        title: const Text('历史'),
         actions: [
           if (_history.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.delete_sweep),
-              tooltip: 'Clear All',
+              tooltip: '清空全部',
               onPressed: () async {
                 final confirm = await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
-                    title: const Text('Clear All History'),
-                    content: const Text('Are you sure you want to clear all history?'),
+                    title: const Text('清空全部历史'),
+                    content: const Text('确定要清空所有历史吗？'),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.of(context).pop(false),
-                        child: const Text('Cancel'),
+                        child: const Text('取消'),
                       ),
                       FilledButton(
                         style: FilledButton.styleFrom(
                           backgroundColor: Theme.of(context).colorScheme.error,
                         ),
                         onPressed: () => Navigator.of(context).pop(true),
-                        child: const Text('Clear All'),
+                        child: const Text('清空全部'),
                       ),
                     ],
                   ),
@@ -238,14 +238,14 @@ class _HistoryPageState extends State<HistoryPage> {
           ),
           const SizedBox(height: 16),
           Text(
-            'No History Yet',
+            '暂无历史',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   color: Theme.of(context).colorScheme.outline,
                 ),
           ),
           const SizedBox(height: 8),
           Text(
-            'Your recently edited files will appear here',
+            '最近编辑的文件将显示在此处',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.outline,
                 ),
@@ -324,15 +324,15 @@ class _HistoryPageState extends State<HistoryPage> {
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final diff = now.difference(date);
-    
+
     if (diff.inMinutes < 60) {
-      return '${diff.inMinutes}m ago';
+      return '${diff.inMinutes}分钟前';
     } else if (diff.inHours < 24) {
-      return '${diff.inHours}h ago';
+      return '${diff.inHours}小时前';
     } else if (diff.inDays < 7) {
-      return '${diff.inDays}d ago';
+      return '${diff.inDays}天前';
     } else {
-      return DateFormat('MMM d, yyyy').format(date);
+      return DateFormat('M月d日 yyyy').format(date);
     }
   }
 }

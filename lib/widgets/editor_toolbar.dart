@@ -16,13 +16,13 @@ class EditorToolbar extends StatelessWidget {
     final text = controller.text;
     final selection = controller.selection;
     final selectedText = selection.isValid ? selection.textInside(text) : placeholder;
-    
+
     final newText = text.replaceRange(
       selection.start,
       selection.end,
       '$before$selectedText$after',
     );
-    
+
     controller.value = TextEditingValue(
       text: newText,
       selection: TextSelection.collapsed(
@@ -34,15 +34,15 @@ class EditorToolbar extends StatelessWidget {
   void _insertLine(String prefix) {
     final text = controller.text;
     final selection = controller.selection;
-    
-    // Find the start of the current line
+
+    // 找到当前行的起始位置
     int lineStart = selection.start;
     while (lineStart > 0 && text[lineStart - 1] != '\n') {
       lineStart--;
     }
-    
+
     final newText = text.replaceRange(lineStart, lineStart, prefix);
-    
+
     controller.value = TextEditingValue(
       text: newText,
       selection: TextSelection.collapsed(
@@ -54,13 +54,13 @@ class EditorToolbar extends StatelessWidget {
   void _insertBlock(String content) {
     final text = controller.text;
     final selection = controller.selection;
-    
+
     final newText = text.replaceRange(
       selection.start,
       selection.end,
       content,
     );
-    
+
     controller.value = TextEditingValue(
       text: newText,
       selection: TextSelection.collapsed(
@@ -88,91 +88,91 @@ class EditorToolbar extends StatelessWidget {
         children: [
           _buildToolbarButton(
             icon: Icons.title,
-            tooltip: 'Heading 1',
+            tooltip: '标题 1',
             onPressed: () => _insertLine('# '),
           ),
           _buildToolbarButton(
             icon: Icons.title,
-            tooltip: 'Heading 2',
+            tooltip: '标题 2',
             onPressed: () => _insertLine('## '),
             fontSize: 14,
           ),
           _buildToolbarButton(
             icon: Icons.title,
-            tooltip: 'Heading 3',
+            tooltip: '标题 3',
             onPressed: () => _insertLine('### '),
             fontSize: 12,
           ),
           _buildDivider(),
           _buildToolbarButton(
             icon: Icons.format_bold,
-            tooltip: 'Bold',
-            onPressed: () => _insertAround('**', '**', placeholder: 'bold text'),
+            tooltip: '加粗',
+            onPressed: () => _insertAround('**', '**', placeholder: '加粗文本'),
           ),
           _buildToolbarButton(
             icon: Icons.format_italic,
-            tooltip: 'Italic',
-            onPressed: () => _insertAround('*', '*', placeholder: 'italic text'),
+            tooltip: '斜体',
+            onPressed: () => _insertAround('*', '*', placeholder: '斜体文本'),
           ),
           _buildToolbarButton(
             icon: Icons.format_strikethrough,
-            tooltip: 'Strikethrough',
-            onPressed: () => _insertAround('~~', '~~', placeholder: 'strikethrough'),
+            tooltip: '删除线',
+            onPressed: () => _insertAround('~~', '~~', placeholder: '删除线文本'),
           ),
           _buildDivider(),
           _buildToolbarButton(
             icon: Icons.format_list_bulleted,
-            tooltip: 'Bullet List',
+            tooltip: '无序列表',
             onPressed: () => _insertLine('- '),
           ),
           _buildToolbarButton(
             icon: Icons.format_list_numbered,
-            tooltip: 'Numbered List',
+            tooltip: '有序列表',
             onPressed: () => _insertLine('1. '),
           ),
           _buildToolbarButton(
             icon: Icons.check_box,
-            tooltip: 'Task List',
+            tooltip: '任务列表',
             onPressed: () => _insertLine('- [ ] '),
           ),
           _buildDivider(),
           _buildToolbarButton(
             icon: Icons.format_quote,
-            tooltip: 'Quote',
+            tooltip: '引用',
             onPressed: () => _insertLine('> '),
           ),
           _buildToolbarButton(
             icon: Icons.code,
-            tooltip: 'Inline Code',
-            onPressed: () => _insertAround('`', '`', placeholder: 'code'),
+            tooltip: '行内代码',
+            onPressed: () => _insertAround('`', '`', placeholder: '代码'),
           ),
           _buildToolbarButton(
             icon: Icons.code_off,
-            tooltip: 'Code Block',
-            onPressed: () => _insertBlock('```\ncode block\n```\n'),
+            tooltip: '代码块',
+            onPressed: () => _insertBlock('```\n代码块\n```\n'),
           ),
           _buildDivider(),
           _buildToolbarButton(
             icon: Icons.link,
-            tooltip: 'Link',
-            onPressed: () => _insertAround('[', '](url)', placeholder: 'link text'),
+            tooltip: '链接',
+            onPressed: () => _insertAround('[', '](url)', placeholder: '链接文字'),
           ),
           _buildToolbarButton(
             icon: Icons.image,
-            tooltip: 'Image',
-            onPressed: () => _insertBlock('![alt text](image_url)'),
+            tooltip: '图片',
+            onPressed: () => _insertBlock('![替代文本](图片链接)'),
           ),
           _buildDivider(),
           _buildToolbarButton(
             icon: Icons.table_chart,
-            tooltip: 'Table',
+            tooltip: '表格',
             onPressed: () => _insertBlock(
-              '\n| Header 1 | Header 2 | Header 3 |\n| --- | --- | --- |\n| Cell 1 | Cell 2 | Cell 3 |\n',
+              '\n| 表头 1 | 表头 2 | 表头 3 |\n| --- | --- | --- |\n| 单元格 1 | 单元格 2 | 单元格 3 |\n',
             ),
           ),
           _buildToolbarButton(
             icon: Icons.horizontal_rule,
-            tooltip: 'Horizontal Rule',
+            tooltip: '分割线',
             onPressed: () => _insertBlock('\n---\n'),
           ),
         ],

@@ -27,7 +27,7 @@ class _HomePageState extends State<HomePage> {
     });
 
     final files = await HistoryService.getRecentFiles(limit: 3);
-    
+
     setState(() {
       _recentFiles = files;
       _isLoading = false;
@@ -35,27 +35,27 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _createNewFile() async {
-    final fileNameController = TextEditingController(text: 'untitled.md');
-    
+    final fileNameController = TextEditingController(text: '未命名.md');
+
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('New Markdown File'),
+        title: const Text('新建 Markdown 文件'),
         content: TextField(
           controller: fileNameController,
           decoration: const InputDecoration(
-            labelText: 'File Name',
-            hintText: 'example.md',
+            labelText: '文件名',
+            hintText: '示例.md',
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: const Text('取消'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(fileNameController.text),
-            child: const Text('Create'),
+            child: const Text('创建'),
           ),
         ],
       ),
@@ -64,7 +64,7 @@ class _HomePageState extends State<HomePage> {
     if (result != null && result.isNotEmpty) {
       final fileName = result.endsWith('.md') ? result : '$result.md';
       final filePath = await FileService.createNewFile(fileName);
-      
+
       if (mounted) {
         Navigator.of(context).push(
           MaterialPageRoute(
@@ -77,7 +77,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _openFile() async {
     final path = await FileService.pickMarkdownFile();
-    
+
     if (path != null && mounted) {
       Navigator.of(context).push(
         MaterialPageRoute(
@@ -114,7 +114,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Markdown Editor',
+                  'MD 编辑器',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -122,7 +122,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Create and edit beautiful Markdown documents',
+                  '创建和编辑精美的 Markdown 文档',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: Theme.of(context).textTheme.bodyLarge?.color?.withValues(alpha: 0.7),
                       ),
@@ -132,7 +132,7 @@ class _HomePageState extends State<HomePage> {
                 FilledButton.icon(
                   onPressed: _createNewFile,
                   icon: const Icon(Icons.add),
-                  label: const Text('New Markdown File'),
+                  label: const Text('新建 Markdown 文件'),
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
@@ -141,7 +141,7 @@ class _HomePageState extends State<HomePage> {
                 OutlinedButton.icon(
                   onPressed: _openFile,
                   icon: const Icon(Icons.folder_open),
-                  label: const Text('Open Local Markdown File'),
+                  label: const Text('打开本地 Markdown 文件'),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
@@ -151,7 +151,7 @@ class _HomePageState extends State<HomePage> {
                   const Center(child: CircularProgressIndicator())
                 else if (_recentFiles.isNotEmpty) ...[
                   Text(
-                    'Recent Files',
+                    '最近文件',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -185,15 +185,15 @@ class _HomePageState extends State<HomePage> {
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final diff = now.difference(date);
-    
+
     if (diff.inMinutes < 60) {
-      return '${diff.inMinutes}m ago';
+      return '${diff.inMinutes}分钟前';
     } else if (diff.inHours < 24) {
-      return '${diff.inHours}h ago';
+      return '${diff.inHours}小时前';
     } else if (diff.inDays < 7) {
-      return '${diff.inDays}d ago';
+      return '${diff.inDays}天前';
     } else {
-      return '${date.month}/${date.day}/${date.year}';
+      return '${date.year}年${date.month}月${date.day}日';
     }
   }
 }

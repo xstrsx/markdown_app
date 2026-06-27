@@ -5,74 +5,62 @@ import 'package:md_editor/main.dart';
 
 void main() {
   setUp(() {
-    // Mock SharedPreferences for tests
     SharedPreferences.setMockInitialValues({});
   });
 
   testWidgets('App renders main screen with title and action buttons', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
-    await tester.pump(); // Allow async calls to settle
+    await tester.pump();
 
-    // Verify the app title is shown
-    expect(find.text('Markdown Editor'), findsOneWidget);
+    expect(find.text('MD 编辑器'), findsOneWidget);
 
-    // Verify the subtitle text
     expect(
-      find.text('Create and edit beautiful Markdown documents'),
+      find.text('创建和编辑精美的 Markdown 文档'),
       findsOneWidget,
     );
 
-    // Verify both action buttons exist
-    expect(find.text('New Markdown File'), findsOneWidget);
-    expect(find.text('Open Local Markdown File'), findsOneWidget);
+    expect(find.text('新建 Markdown 文件'), findsOneWidget);
+    expect(find.text('打开本地 Markdown 文件'), findsOneWidget);
 
-    // Verify navigation destinations exist
-    expect(find.text('Home'), findsWidgets);
-    expect(find.text('History'), findsWidgets);
+    expect(find.text('首页'), findsWidgets);
+    expect(find.text('历史'), findsWidgets);
   });
 
   testWidgets('Navigation switches between Home and History pages', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
-    await tester.pump(); // Allow async calls to settle
+    await tester.pump();
 
-    // Initially on Home page — verify home content
-    expect(find.text('Markdown Editor'), findsOneWidget);
-    expect(find.text('No History Yet'), findsNothing);
+    expect(find.text('MD 编辑器'), findsOneWidget);
+    expect(find.text('暂无历史'), findsNothing);
 
-    // Navigate to History page by tapping the nav label
-    await tester.tap(find.text('History').last);
+    await tester.tap(find.text('历史').last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    // Should now see the History page with empty state
-    expect(find.text('No History Yet'), findsOneWidget);
+    expect(find.text('暂无历史'), findsOneWidget);
     expect(
-      find.text('Your recently edited files will appear here'),
+      find.text('最近编辑的文件将显示在此处'),
       findsOneWidget,
     );
 
-    // Navigate back to Home
-    await tester.tap(find.text('Home').first);
+    await tester.tap(find.text('首页').first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    // Should be back on home
-    expect(find.text('Markdown Editor'), findsOneWidget);
+    expect(find.text('MD 编辑器'), findsOneWidget);
   });
 
   testWidgets('Create new file dialog opens and has correct fields', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
-    await tester.pump(); // Allow async calls to settle
+    await tester.pump();
 
-    // Tap "New Markdown File" button
-    await tester.tap(find.text('New Markdown File'));
+    await tester.tap(find.text('新建 Markdown 文件'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
-    // Verify dialog shows up
-    expect(find.text('New Markdown File'), findsWidgets);
-    expect(find.text('File Name'), findsOneWidget);
-    expect(find.text('Cancel'), findsOneWidget);
-    expect(find.text('Create'), findsOneWidget);
+    expect(find.text('新建 Markdown 文件'), findsWidgets);
+    expect(find.text('文件名'), findsOneWidget);
+    expect(find.text('取消'), findsOneWidget);
+    expect(find.text('创建'), findsOneWidget);
   });
 }

@@ -26,7 +26,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
   late TabController _tabController;
   late ScrollController _editorScrollController;
   late ScrollController _previewScrollController;
-  
+
   MarkdownFile? _currentFile;
   bool _isModified = false;
   bool _isDesktop = false;
@@ -40,7 +40,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     _editorScrollController = ScrollController();
     _previewScrollController = ScrollController();
     _tabController = TabController(length: 2, vsync: this);
-    
+
     _loadInitialFile();
     _setupAutoSave();
   }
@@ -74,8 +74,8 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
           _isModified = true;
         });
       }
-      
-      // Reset auto-save timer
+
+      // 重置自动保存计时器
       _autoSaveTimer?.cancel();
       _autoSaveTimer = Timer(const Duration(seconds: 30), () {
         _autoSave();
@@ -110,12 +110,12 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
         lastModified: DateTime.now(),
         size: _textController.text.length,
       );
-      
+
       setState(() {
         _currentFile = updatedFile;
         _isModified = false;
       });
-      
+
       await HistoryService.addToHistory(updatedFile);
     }
 
@@ -125,9 +125,9 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
   }
 
   Future<void> _saveAs() async {
-    final defaultName = _currentFile?.name ?? 'untitled.md';
+    final defaultName = _currentFile?.name ?? '未命名.md';
     final path = await FileService.getSavePath(defaultName: defaultName);
-    
+
     if (path != null) {
       final success = await FileService.saveFile(path, _textController.text);
       if (success) {
@@ -138,17 +138,17 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
           lastModified: DateTime.now(),
           size: _textController.text.length,
         );
-        
+
         setState(() {
           _currentFile = newFile;
           _isModified = false;
         });
-        
+
         await HistoryService.addToHistory(newFile);
-        
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('File saved successfully')),
+            const SnackBar(content: Text('文件保存成功')),
           );
         }
       }
@@ -158,20 +158,20 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
   Future<void> _insertImage() async {
     final picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    
+
     if (image != null) {
       final imagePath = image.path;
       final imageMarkdown = '![image]($imagePath)';
-      
+
       final text = _textController.text;
       final selection = _textController.selection;
-      
+
       final newText = text.replaceRange(
         selection.start,
         selection.end,
         imageMarkdown,
       );
-      
+
       _textController.value = TextEditingValue(
         text: newText,
         selection: TextSelection.collapsed(
@@ -186,16 +186,16 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     final shouldSave = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Save changes?'),
-        content: const Text('You have unsaved changes. Do you want to save before leaving?'),
+        title: const Text('保存更改？'),
+        content: const Text('您有未保存的更改。离开前要保存吗？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Discard'),
+            child: const Text('放弃'),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Save'),
+            child: const Text('保存'),
           ),
         ],
       ),
@@ -230,7 +230,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
       onPopInvokedWithResult: _onPopInvokedWithResult,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(_currentFile?.name ?? 'New Document'),
+          title: Text(_currentFile?.name ?? '新建文档'),
           actions: [
             if (_isSaving)
               const Padding(
@@ -244,17 +244,17 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
             if (_isModified && !_isSaving)
               IconButton(
                 icon: const Icon(Icons.save),
-                tooltip: 'Save',
+                tooltip: '保存',
                 onPressed: _saveFile,
               ),
             IconButton(
               icon: const Icon(Icons.save_as),
-              tooltip: 'Save As',
+              tooltip: '另存为',
               onPressed: _saveAs,
             ),
             IconButton(
               icon: const Icon(Icons.share),
-              tooltip: 'Share',
+              tooltip: '分享',
               onPressed: () {
                 if (_currentFile != null) {
                   FileService.shareFile(_currentFile!.path);
@@ -313,8 +313,8 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
         TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(icon: Icon(Icons.edit), text: 'Edit'),
-            Tab(icon: Icon(Icons.preview), text: 'Preview'),
+            Tab(icon: Icon(Icons.edit), text: '编辑'),
+            Tab(icon: Icon(Icons.preview), text: '预览'),
           ],
         ),
         Expanded(
@@ -358,7 +358,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
             ),
         decoration: const InputDecoration(
           border: InputBorder.none,
-          hintText: 'Start writing your Markdown...',
+          hintText: '开始编写 Markdown...',
         ),
         keyboardType: TextInputType.multiline,
       ),

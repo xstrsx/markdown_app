@@ -40,7 +40,7 @@ class FileService {
 
   static Future<String?> getSavePath({String defaultName = 'untitled.md'}) async {
     final outputPath = await FilePicker.platform.saveFile(
-      dialogTitle: 'Save Markdown File',
+      dialogTitle: '保存 Markdown 文件',
       fileName: defaultName,
       type: FileType.custom,
       allowedExtensions: ['md'],
@@ -65,14 +65,14 @@ class FileService {
     final file = File(filePath);
     
     if (!await file.exists()) {
-      await file.writeAsString('# $fileName\n\nStart writing your Markdown content here...\n');
+      await file.writeAsString('# $fileName\n\n开始编写 Markdown 内容...\n');
     }
     
     return filePath;
   }
 
   static Future<void> shareFile(String path) async {
-    await Share.shareXFiles([XFile(path)], text: 'Share Markdown file');
+    await Share.shareXFiles([XFile(path)], text: '分享 Markdown 文件');
   }
 
   static Future<void> openFileLocation(String path) async {

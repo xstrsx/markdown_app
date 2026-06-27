@@ -121,7 +121,7 @@ class MarkdownPreview extends StatelessWidget {
                     const Icon(Icons.broken_image, size: 20),
                     const SizedBox(width: 8),
                     Text(
-                      alt ?? 'Image not found',
+                      alt ?? '图片未找到',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
