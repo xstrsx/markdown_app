@@ -23,7 +23,7 @@ dependencies:
   flutter_math_fork: ^0.7.2
   
   # File operations
-  file_picker: ^6.1.1
+  file_picker: ^8.1.6
   path_provider: ^2.1.1
   share_plus: ^7.2.1
   
