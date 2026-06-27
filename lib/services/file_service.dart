@@ -39,13 +39,16 @@ class FileService {
   }
 
   static Future<String?> getSavePath({String defaultName = 'untitled.md'}) async {
-    final outputPath = await FilePicker.platform.saveFile(
-      dialogTitle: '保存 Markdown 文件',
-      fileName: defaultName,
-      type: FileType.custom,
-      allowedExtensions: ['md'],
-    );
-    return outputPath;
+    try {
+      final outputPath = await FilePicker.platform.saveFile(
+        dialogTitle: '保存 Markdown 文件',
+        fileName: defaultName,
+        type: FileType.any,
+      );
+      return outputPath;
+    } catch (e) {
+      return null;
+    }
   }
 
   static Future<String> getDocumentsDirectory() async {
@@ -76,20 +79,17 @@ class FileService {
   }
 
   static Future<void> openFileLocation(String path) async {
-    // This is platform-specific
-    // For desktop, we'd use the file manager
-    // For mobile, we'd use a file explorer intent
-    // For simplicity, we'll just share the file path info
     try {
       if (Platform.isWindows) {
-        await Process.run('explorer', ['/select,', path]);
+        await Process.run('explorer', ["/select,$path"]);
       } else if (Platform.isMacOS) {
         await Process.run('open', ['-R', path]);
       } else if (Platform.isLinux) {
-        await Process.run('xdg-open', [path.substring(0, path.lastIndexOf('/'))]);
+        final dir = path.substring(0, path.lastIndexOf('/'));
+        await Process.run('xdg-open', [dir]);
       }
     } catch (e) {
-      // Ignore errors
+      // Ignore silently
     }
   }
 

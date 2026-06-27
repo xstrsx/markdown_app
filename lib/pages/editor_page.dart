@@ -55,6 +55,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     if (widget.file != null) {
       _currentFile = widget.file;
       _textController.text = widget.file!.content;
+      _isModified = false;
     } else if (widget.initialFilePath != null) {
       final file = await FileService.openFile(widget.initialFilePath!);
       if (file != null) {
@@ -62,6 +63,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
           _currentFile = file;
           _textController.text = file.content;
         });
+        _isModified = false;
         await HistoryService.addToHistory(file);
       }
     }
@@ -117,6 +119,10 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
       });
 
       await HistoryService.addToHistory(updatedFile);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('保存失败，请检查文件权限')),
+      );
     }
 
     setState(() {
@@ -133,7 +139,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
       if (success) {
         final newFile = MarkdownFile(
           path: path,
-          name: path.split('/').last,
+          name: path.split(RegExp(r'[/\\]')).last,
           content: _textController.text,
           lastModified: DateTime.now(),
           size: _textController.text.length,
@@ -151,6 +157,10 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
             const SnackBar(content: Text('文件保存成功')),
           );
         }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('保存失败，请检查文件权限')),
+        );
       }
     }
   }
