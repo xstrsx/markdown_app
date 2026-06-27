@@ -1,4 +1,4 @@
-package com.example.md_editor
+package com.xstrsx.mdeditor
 
 import io.flutter.embedding.android.FlutterActivity
 
