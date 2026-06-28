@@ -107,6 +107,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     );
 
     if (success) {
+      final savedPath = _currentFile!.path;
       final updatedFile = _currentFile!.copyWith(
         content: _textController.text,
         lastModified: DateTime.now(),
@@ -119,6 +120,12 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
       });
 
       await HistoryService.addToHistory(updatedFile);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已保存：$savedPath')),
+        );
+      }
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('保存失败，请检查文件权限')),

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -43,7 +44,9 @@ class FileService {
       final outputPath = await FilePicker.platform.saveFile(
         dialogTitle: '保存 Markdown 文件',
         fileName: defaultName,
-        type: FileType.any,
+        type: FileType.custom,
+        allowedExtensions: ['md'],
+        lockParentWindow: true,
       );
       return outputPath;
     } catch (e) {
@@ -56,7 +59,6 @@ class FileService {
       final directory = await getApplicationDocumentsDirectory();
       return directory.path;
     } catch (e) {
-      // Fallback for desktop
       final directory = await getApplicationSupportDirectory();
       return directory.path;
     }
@@ -66,11 +68,11 @@ class FileService {
     final docsDir = await getDocumentsDirectory();
     final filePath = '$docsDir/$fileName';
     final file = File(filePath);
-    
+
     if (!await file.exists()) {
       await file.writeAsString('# $fileName\n\n开始编写 Markdown 内容...\n');
     }
-    
+
     return filePath;
   }
 
@@ -78,10 +80,16 @@ class FileService {
     await Share.shareXFiles([XFile(path)], text: '分享 Markdown 文件');
   }
 
+  /// 在文件管理器中打开文件所在位置，如果失败则将路径复制到剪贴板
   static Future<void> openFileLocation(String path) async {
     try {
       if (Platform.isWindows) {
-        await Process.run('explorer', ["/select,$path"]);
+        final result = await Process.run('explorer', ['/select,$path']);
+        if (result.exitCode != 0) {
+          // 如果 explorer 失败，尝试只打开父目录
+          final dir = path.substring(0, path.lastIndexOf(RegExp(r'[/\\]')));
+          await Process.run('explorer', [dir]);
+        }
       } else if (Platform.isMacOS) {
         await Process.run('open', ['-R', path]);
       } else if (Platform.isLinux) {
@@ -89,7 +97,8 @@ class FileService {
         await Process.run('xdg-open', [dir]);
       }
     } catch (e) {
-      // Ignore silently
+      // Fallback: copy path to clipboard
+      await Clipboard.setData(ClipboardData(text: path));
     }
   }
 
