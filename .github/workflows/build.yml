@@ -81,9 +81,14 @@ jobs:
       - name: Build Windows executable
         run: flutter build windows --release
 
+      - name: Verify build output
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse build/windows/ | Select-Object FullName, Length
+
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-release
-          path: build/windows/runner/Release/
+          path: build/windows/x64/runner/Release/
           retention-days: 30
