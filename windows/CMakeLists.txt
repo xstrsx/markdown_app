@@ -2,6 +2,9 @@
 cmake_minimum_required(VERSION 3.14)
 project(md_editor LANGUAGES CXX)
 
+# Suppress MSVC error C2338 for <experimental/coroutine> in older plugins (e.g. permission_handler_windows)
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
 set(BINARY_NAME "md_editor")
