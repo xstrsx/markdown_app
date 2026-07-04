@@ -1,63 +1,65 @@
 # Findings & Decisions
 
-## Requirements
-- Fix real bugs in the `md_editor` Flutter markdown editor app
+## 项目概况
 
-## Research Findings
+| 项目 | 值 |
+|------|-----|
+| 名称 | md_editor |
+| 框架 | Flutter 3.44.1 / Dart 3.12.1 |
+| 平台 | Android + Windows (desktop) |
+| 包名 | com.xstrsx.mdeditor |
+| CI | GitHub Actions (build.yml) |
 
-### Bug Inventory (from code review)
+## 架构概述
 
-**Bug #1 — Test file is template stub**
-- `test/widget_test.dart` contains the default Flutter counter app test (looking for `'0'`, `'1'`, `Icons.add`)
-- This has nothing to do with the markdown editor and will fail/be irrelevant
-- Needs to be rewritten to test actual editor functionality
+```
+lib/
+├── main.dart              # 入口 + 导航（NavigationRail / BottomBar）
+├── models/
+│   └── markdown_file.dart  # 数据模型（路径、URI、缓存、JSON序列化）
+├── pages/
+│   ├── home_page.dart      # 首页：新建/打开/最近文件
+│   ├── editor_page.dart    # 编辑器：编辑/预览/保存/另存/分享
+│   └── history_page.dart   # 历史：列表/详情/删除/打开位置
+├── services/
+│   ├── file_service.dart   # 文件操作（Android用MethodChannel/桌面用file_picker）
+│   └── history_service.dart # 历史持久化（SharedPreferences）
+└── widgets/
+    ├── editor_toolbar.dart  # 工具栏（标题/格式/列表/代码/表格）
+    └── markdown_preview.dart # Markdown渲染（语法高亮/图片/样式）
+```
 
-**Bug #2 — Syntax highlighter doesn't highlight**
-- `markdown_preview.dart` has `_CustomSyntaxHighlighter` extending `SyntaxHighlighter`
-- The `format()` method returns the source as plain unhighlighted `TextSpan`
-- `flutter_highlighter` is already imported as a dependency but never used for highlighting
-- The `github` theme is imported but unused
-- Proper fix: Use `Highlight(source: source, language: '', theme: githubTheme)` from flutter_highlighter
+## Android 文件操作机制
 
-**Bug #3 — Code block toolbar insert adds leading newline**
-- `editor_toolbar.dart` line 153: `_insertBlock('\n```\ncode block\n```\n')`
-- The leading `\n` creates a blank line above the code block, even when cursor is at document start
-- Fix: `_insertBlock('```\ncode block\n```\n')`
+### 为什么不用 file_picker？
 
-**Bug #4 — WillPopScope is deprecated**
-- `editor_page.dart` line 228: `WillPopScope` is deprecated in Flutter 3.16+
-- Should be replaced with `PopScope` with `onPopInvokedWithResult` (or `onPopInvoked`)
-- This will produce deprecation warnings and may break in future Flutter versions
+`file_picker` 的 Android 实现有三大缺陷：
+1. `ACTION_OPEN_DOCUMENT` 不带 `FLAG_GRANT_WRITE_URI_PERMISSION`，无法写回原文件
+2. `saveFile()` 将 null bytes 写入 OutputStream，创建空文件
+3. 总是缓存文件到 app 私有目录，返回缓存路径
 
-**Bug #5 — `_insertAround` uses `textInside` with potential edge cases**
-- `editor_toolbar.dart` line 19: `textInside(text)` works for valid selections
-- If selection is reversed (base before extent), `textInside` still returns correct content since it uses `start` and `end` normalized
-- Actually `textInside` doesn't handle base/extent — it uses `start` and `end`. This should be fine.
-- No action needed — not actually a bug
+### 当前方案
 
-**Bug #6 — `Color.withValues(alpha: ...)` requires recent Flutter**
-- `home_page.dart` lines 127, 299, 305 use `withValues(alpha: 0.7)` and `withValues(alpha: 0.5)`
-- Also in `markdown_preview.dart` line 68, 78: `withValues(alpha: 0.7)` and `withValues(alpha: 0.3)`
-- And in `editor_toolbar.dart` line 204: `withValues(alpha: 0.3)`
-- `withValues` was added in Flutter 3.27 / Dart SDK 3.7
-- If using older Flutter, this breaks compilation. But if it's already compiling, leave as-is.
-- **Decision:** Check Flutter version first; if < 3.27, replace with `withOpacity()`
+```
+picking  → MainActivity.pickFile → ACTION_OPEN_DOCUMENT + WRITE flag
+                                    → ContentResolver.takePersistableUriPermission()
+                                    → 缓存到 cacheDir → 返回 path+uri+realPath
 
-## Technical Decisions
-| Decision | Rationale |
-|----------|-----------|
-| Fix widget_test.dart first | Dead-simple change, immediately verifiable with `flutter test` |
-| Use `Highlight` class from flutter_highlighter | Already in dependencies; just needs proper wiring |
-| Use `PopScope` replacement | Follow Flutter deprecation policy |
-| Remove leading `\n` from code block insert | Clean UX — no blank line at document start |
+saving   → file_service.saveFile → writeToUri (SAF OutputStream)
+or         file_service.getSavePath → saveFileAs (ACTION_CREATE_DOCUMENT + 内容写入)
 
-## Issues Encountered
-| Issue | Resolution |
-|-------|------------|
-| TBD   |            |
+caching  → file_service.cacheContent → documentsDir/cache/{name}_{hash}.md
+                                     → contentPath 存入 MarkdownFile
+                                     → 历史重打开时从缓存加载（URI权限过期后仍可用）
+```
+
+## 已知限制
+
+1. **历史文件重打开**：URI 权限在 app 重启后失效，依赖 contentPath 缓存
+2. **同名文件缓存**：使用 name + identifier hash 区分，但 identifier 变更会产生新缓存
+3. **Android 11+ 路径解析**：`_data` 列可能返回 null，displayPath 仅显示文件名
+4. **大文件性能**：`MarkdownFile.fromFile` 同步读取，超大文件可能卡顿
 
 ## Resources
-- `flutter_highlighter` docs: https://pub.dev/packages/flutter_highlighter
-- `PopScope` migration: https://docs.flutter.dev/release/breaking-changes/default-popsystem
-- Project root: D:\github\markdown_app
-- Source files: lib/main.dart, lib/pages/, lib/widgets/, lib/services/, lib/models/
+- file_picker 8.3.7 源码: `C:/Users/atlas/AppData/Local/Pub/Cache/hosted/pub.dev/file_picker-8.3.7/`
+- flutter_markdown 0.6.23 源码: `C:/Users/atlas/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_markdown-0.6.23/`
