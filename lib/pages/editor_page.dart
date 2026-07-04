@@ -39,7 +39,6 @@ class _EditorPageState extends State<EditorPage>
   String? _contentUri;
   String? _cachePath;
   bool _isModified = false;
-  bool _isDesktop = false;
   Timer? _autoSaveTimer;
   bool _isSaving = false;
 
@@ -54,19 +53,13 @@ class _EditorPageState extends State<EditorPage>
     _setupAutoSave();
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _isDesktop = MediaQuery.of(context).size.width > 600;
-  }
-
   Future<void> _loadInitialFile() async {
     // Case 1: file object passed (from recent history or open)
     if (widget.file != null) {
       final file = widget.file!;
       _currentFile = file;
       _contentUri = file.contentUri;
-      _cachePath = file.path;
+      _cachePath = file.contentPath;
 
       // Load content — try sources in priority order
       var content = file.content;
@@ -93,7 +86,8 @@ class _EditorPageState extends State<EditorPage>
         final text = loaded.content;
 
         // Persist content to permanent cache
-        final contentPath = await FileService.cacheContent(text, name);
+        final id = contentUri ?? displayPath;
+        final contentPath = await FileService.cacheContent(text, name, id);
 
         final updatedFile = MarkdownFile(
           path: displayPath,
@@ -183,7 +177,8 @@ class _EditorPageState extends State<EditorPage>
       final name = _currentFile!.name;
       final content = _textController.text;
       // Refresh persistent cache
-      final contentPath = await FileService.cacheContent(content, name);
+      final id = _contentUri ?? _currentFile!.path;
+      final contentPath = await FileService.cacheContent(content, name, id);
       final updatedFile = _currentFile!.copyWith(
         content: content,
         contentPath: contentPath,
@@ -228,7 +223,8 @@ class _EditorPageState extends State<EditorPage>
     if (result != null) {
       final content = _textController.text;
       // Persist to cache
-      final contentPath = await FileService.cacheContent(content, result.name);
+      final id = result.contentUri ?? result.displayPath;
+      final contentPath = await FileService.cacheContent(content, result.name, id);
       final newFile = MarkdownFile(
         path: result.displayPath,
         contentUri: result.contentUri,
@@ -260,10 +256,17 @@ class _EditorPageState extends State<EditorPage>
       final md = '![image](${image.path})';
       final text = _textController.text;
       final sel = _textController.selection;
-      final newText = text.replaceRange(sel.start, sel.end, md);
+      final start = (sel.start >= 0 && sel.start <= text.length)
+          ? sel.start
+          : text.length;
+      final end = (sel.end >= 0 && sel.end <= text.length &&
+              sel.end >= start)
+          ? sel.end
+          : start;
+      final newText = text.replaceRange(start, end, md);
       _textController.value = TextEditingValue(
         text: newText,
-        selection: TextSelection.collapsed(offset: sel.start + md.length),
+        selection: TextSelection.collapsed(offset: start + md.length),
       );
     }
   }
@@ -311,6 +314,7 @@ class _EditorPageState extends State<EditorPage>
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width > 600;
     return PopScope(
       canPop: !_isModified,
       onPopInvokedWithResult: _onPopInvokedWithResult,
@@ -346,7 +350,7 @@ class _EditorPageState extends State<EditorPage>
             ),
           ],
         ),
-        body: _isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
+        body: isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
       ),
     );
   }

@@ -192,13 +192,17 @@ class FileService {
   // ─── Local content cache (survives app restart) ────────────────────
 
   /// Persist content to a local cache file and return its path.
-  static Future<String> cacheContent(String content, String name) async {
+  /// [identifier] disambiguates files with the same name from different
+  /// directories (e.g. content URI or display path).
+  static Future<String> cacheContent(
+      String content, String name, String? identifier) async {
     final dir = await getDocumentsDirectory();
     final cacheDir = Directory('$dir/cache');
     if (!await cacheDir.exists()) await cacheDir.create(recursive: true);
-    // Use a stable filename based on name so updates overwrite old cache
+    // Stable filename: name + hash of identifier to prevent same-name collision
     final safeName = name.replaceAll(RegExp(r'[^\w.\-]'), '_');
-    final file = File('${cacheDir.path}/$safeName');
+    final idHash = (identifier ?? safeName).hashCode.toRadixString(16);
+    final file = File('${cacheDir.path}/${safeName}_$idHash.md');
     await file.writeAsString(content);
     return file.path;
   }
@@ -239,13 +243,15 @@ class FileService {
       } else if (Platform.isWindows) {
         final result = await Process.run('explorer', ['/select,$path']);
         if (result.exitCode != 0) {
-          final dir = path.substring(0, path.lastIndexOf(RegExp(r'[/\\]')));
+          final sep = path.lastIndexOf(RegExp(r'[/\\]'));
+          final dir = sep >= 0 ? path.substring(0, sep) : path;
           await Process.run('explorer', [dir]);
         }
       } else if (Platform.isMacOS) {
         await Process.run('open', ['-R', path]);
       } else if (Platform.isLinux) {
-        final dir = path.substring(0, path.lastIndexOf('/'));
+        final sep = path.lastIndexOf('/');
+        final dir = sep >= 0 ? path.substring(0, sep) : path;
         await Process.run('xdg-open', [dir]);
       }
     } catch (e) {

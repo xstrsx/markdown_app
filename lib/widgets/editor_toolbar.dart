@@ -12,21 +12,23 @@ class EditorToolbar extends StatelessWidget {
     required this.onInsertLink,
   });
 
+  // Returns a safe offset within [0, text.length], falling back to end-of-text.
+  int _safePos(int pos, String text) =>
+      (pos < 0 || pos > text.length) ? text.length : pos;
+
   void _insertAround(String before, String after, {String placeholder = ''}) {
     final text = controller.text;
     final selection = controller.selection;
     final selectedText = selection.isValid ? selection.textInside(text) : placeholder;
+    final start = _safePos(selection.start, text);
+    final end = _safePos(selection.end, text);
 
-    final newText = text.replaceRange(
-      selection.start,
-      selection.end,
-      '$before$selectedText$after',
-    );
+    final newText = text.replaceRange(start, end, '$before$selectedText$after');
 
     controller.value = TextEditingValue(
       text: newText,
       selection: TextSelection.collapsed(
-        offset: selection.start + before.length + selectedText.length,
+        offset: start + before.length + selectedText.length,
       ),
     );
   }
@@ -34,38 +36,34 @@ class EditorToolbar extends StatelessWidget {
   void _insertLine(String prefix) {
     final text = controller.text;
     final selection = controller.selection;
+    final pos = _safePos(selection.start, text);
 
     // 找到当前行的起始位置
-    int lineStart = selection.start;
+    int lineStart = pos;
     while (lineStart > 0 && text[lineStart - 1] != '\n') {
       lineStart--;
     }
 
     final newText = text.replaceRange(lineStart, lineStart, prefix);
+    final newPos = pos + prefix.length;
 
     controller.value = TextEditingValue(
       text: newText,
-      selection: TextSelection.collapsed(
-        offset: selection.start + prefix.length,
-      ),
+      selection: TextSelection.collapsed(offset: newPos),
     );
   }
 
   void _insertBlock(String content) {
     final text = controller.text;
     final selection = controller.selection;
+    final pos = _safePos(selection.start, text);
 
-    final newText = text.replaceRange(
-      selection.start,
-      selection.end,
-      content,
-    );
+    final newText = text.replaceRange(pos, pos, content);
+    final newPos = pos + content.length;
 
     controller.value = TextEditingValue(
       text: newText,
-      selection: TextSelection.collapsed(
-        offset: selection.start + content.length,
-      ),
+      selection: TextSelection.collapsed(offset: newPos),
     );
   }
 
@@ -155,12 +153,12 @@ class EditorToolbar extends StatelessWidget {
           _buildToolbarButton(
             icon: Icons.link,
             tooltip: '链接',
-            onPressed: () => _insertAround('[', '](url)', placeholder: '链接文字'),
+            onPressed: () => onInsertLink('url'),
           ),
           _buildToolbarButton(
             icon: Icons.image,
             tooltip: '图片',
-            onPressed: () => _insertBlock('![替代文本](图片链接)'),
+            onPressed: () => onInsertImage('image_url'),
           ),
           _buildDivider(),
           _buildToolbarButton(

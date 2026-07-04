@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
@@ -109,9 +110,33 @@ class MarkdownPreview extends StatelessWidget {
           }
         },
         imageBuilder: (uri, title, alt) {
-          // Handle image rendering
+          final uriStr = uri.toString();
+          // Local file path or content URI → use Image.file
+          if (uri.scheme == 'file' || uri.scheme == 'content' ||
+              (!uri.hasScheme && !uriStr.startsWith('http'))) {
+            return Image.file(
+              File(uriStr),
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.broken_image, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        alt ?? '图片未找到',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          }
+          // Network image
           return Image.network(
-            uri.toString(),
+            uriStr,
             errorBuilder: (context, error, stackTrace) {
               return Container(
                 padding: const EdgeInsets.all(16),

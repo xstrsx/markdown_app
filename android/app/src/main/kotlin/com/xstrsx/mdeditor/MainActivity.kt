@@ -65,8 +65,9 @@ class MainActivity : FlutterActivity() {
                         if (path != null) {
                             openLocation(path)
                             result.success(true)
+                        } else {
+                            result.success(null)
                         }
-                        result.success(null)
                     }
                     else -> result.notImplemented()
                 }

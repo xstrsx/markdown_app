@@ -67,7 +67,6 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
-  bool _isDesktop = false;
 
   final List<Widget> _pages = const [
     HomePage(),
@@ -75,14 +74,9 @@ class _MainScreenState extends State<MainScreen> {
   ];
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _isDesktop = MediaQuery.of(context).size.width > 600;
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (_isDesktop) {
+    final isDesktop = MediaQuery.of(context).size.width > 600;
+    if (isDesktop) {
       return _buildDesktopLayout();
     } else {
       return _buildMobileLayout();

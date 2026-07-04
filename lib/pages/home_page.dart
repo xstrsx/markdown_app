@@ -63,6 +63,8 @@ class _HomePageState extends State<HomePage> {
       ),
     );
 
+    fileNameController.dispose();
+
     if (result != null && result.isNotEmpty) {
       final fileName = result.endsWith('.md') ? result : '$result.md';
       final filePath = await FileService.createNewFile(fileName);
