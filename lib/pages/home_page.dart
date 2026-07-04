@@ -83,7 +83,9 @@ class _HomePageState extends State<HomePage> {
         MaterialPageRoute(
           builder: (context) => EditorPage(
             initialFilePath: result.path,
+            initialDisplayPath: result.displayPath,
             initialContentUri: result.contentUri,
+            initialName: result.name,
           ),
         ),
       ).then((_) => _loadRecentFiles());
@@ -93,7 +95,7 @@ class _HomePageState extends State<HomePage> {
   void _openRecentFile(MarkdownFile file) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => EditorPage(initialFilePath: file.path),
+        builder: (context) => EditorPage(file: file),
       ),
     ).then((_) => _loadRecentFiles());
   }

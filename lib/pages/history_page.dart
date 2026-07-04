@@ -38,7 +38,7 @@ class _HistoryPageState extends State<HistoryPage> {
   void _openFile(MarkdownFile file) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => EditorPage(initialFilePath: file.path),
+        builder: (context) => EditorPage(file: file),
       ),
     ).then((_) => _loadHistory());
   }

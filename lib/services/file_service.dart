@@ -7,18 +7,26 @@ import 'package:share_plus/share_plus.dart';
 import '../models/markdown_file.dart';
 
 class PickResult {
+  /// Local cache path for reading file content
   final String path;
+  /// Resolved real path or URI string for display / history dedup
+  final String displayPath;
+  /// Android content URI for writing back via SAF
   final String? contentUri;
+  /// File name
+  final String name;
 
-  PickResult({required this.path, this.contentUri});
+  PickResult({
+    required this.path,
+    required this.displayPath,
+    this.contentUri,
+    required this.name,
+  });
 }
 
 class FileService {
   static const _channel = MethodChannel('com.xstrsx.mdeditor/file');
 
-  /// Pick a markdown file.
-  /// On Android: uses our own platform channel with WRITE permission.
-  /// On desktop: uses file_picker.
   static Future<PickResult?> pickMarkdownFile() async {
     if (Platform.isAndroid) {
       try {
@@ -26,9 +34,13 @@ class FileService {
           'mimeTypes': ['text/markdown', 'text/plain', 'text/*'],
         });
         if (result == null) return null;
+        final realPath = result['realPath'] as String? ?? '';
+        final uri = result['uri'] as String? ?? '';
         return PickResult(
           path: result['path'] as String,
-          contentUri: result['uri'] as String?,
+          displayPath: realPath.isNotEmpty ? realPath : uri,
+          contentUri: uri.isNotEmpty ? uri : null,
+          name: result['name'] as String? ?? 'unknown.md',
         );
       } catch (e) {
         return null;
@@ -43,15 +55,17 @@ class FileService {
     if (result == null || result.files.isEmpty) return null;
     final file = result.files.single;
     if (file.path == null) return null;
-    return PickResult(path: file.path!);
+    return PickResult(
+      path: file.path!,
+      displayPath: file.path!,
+      name: file.name,
+    );
   }
 
   static Future<MarkdownFile?> openFile(String path) async {
     try {
       final file = File(path);
-      if (!await file.exists()) {
-        return null;
-      }
+      if (!await file.exists()) return null;
       return MarkdownFile.fromFile(file);
     } catch (e) {
       return null;
@@ -66,15 +80,12 @@ class FileService {
       if (Platform.isAndroid &&
           contentUri != null &&
           contentUri.isNotEmpty) {
-        // Write back to the original file via SAF URI
         await _channel.invokeMethod('writeToUri', {
           'uri': contentUri,
           'content': content,
         });
         return true;
       }
-
-      // Direct file write (desktop or Android with real path)
       final file = File(path);
       await file.writeAsString(content);
       return true;
@@ -84,9 +95,7 @@ class FileService {
   }
 
   /// Show "Save As" dialog.
-  /// On Android: uses platform channel to properly write content.
-  /// On desktop: uses file_picker.
-  static Future<String?> getSavePath({
+  static Future<PickResult?> getSavePath({
     String defaultName = '未命名.md',
     String content = '',
   }) async {
@@ -97,7 +106,14 @@ class FileService {
           'content': content,
         });
         if (result == null) return null;
-        return result['path'] as String?;
+        final realPath = result['realPath'] as String? ?? '';
+        final uri = result['uri'] as String? ?? '';
+        return PickResult(
+          path: result['path'] as String,
+          displayPath: realPath.isNotEmpty ? realPath : uri,
+          contentUri: uri.isNotEmpty ? uri : null,
+          name: result['name'] as String? ?? defaultName,
+        );
       } catch (e) {
         return null;
       }
@@ -112,7 +128,12 @@ class FileService {
         type: FileType.any,
         bytes: bytes,
       );
-      return outputPath;
+      if (outputPath == null) return null;
+      return PickResult(
+        path: outputPath,
+        displayPath: outputPath,
+        name: outputPath.split(RegExp(r'[/\\]')).last,
+      );
     } catch (e) {
       return null;
     }
@@ -132,11 +153,9 @@ class FileService {
     final docsDir = await getDocumentsDirectory();
     final filePath = '$docsDir/$fileName';
     final file = File(filePath);
-
     if (!await file.exists()) {
       await file.writeAsString('# $fileName\n\n开始编写 Markdown 内容...\n');
     }
-
     return filePath;
   }
 
@@ -144,14 +163,12 @@ class FileService {
     await Share.shareXFiles([XFile(path)], text: '分享 Markdown 文件');
   }
 
-  /// Open the file's parent folder in the platform file manager.
   static Future<void> openFileLocation(String path,
       {String? contentUri}) async {
     try {
       if (Platform.isAndroid) {
-        await _channel.invokeMethod('openFileLocation', {
-          'path': path,
-        });
+        await _channel.invokeMethod('openFileLocation', {'path': path});
+        // On Android, the native side shows a Toast — no need for extra feedback
       } else if (Platform.isWindows) {
         final result = await Process.run('explorer', ['/select,$path']);
         if (result.exitCode != 0) {
@@ -170,14 +187,11 @@ class FileService {
   }
 
   static String formatFileSize(int bytes) {
-    if (bytes < 1024) {
-      return '$bytes B';
-    } else if (bytes < 1024 * 1024) {
-      return '${(bytes / 1024).toStringAsFixed(1)} KB';
-    } else if (bytes < 1024 * 1024 * 1024) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-    } else {
-      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
     }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
   }
 }

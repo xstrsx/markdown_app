@@ -10,13 +10,17 @@ import '../widgets/markdown_preview.dart';
 class EditorPage extends StatefulWidget {
   final MarkdownFile? file;
   final String? initialFilePath;
+  final String? initialDisplayPath;
   final String? initialContentUri;
+  final String? initialName;
 
   const EditorPage({
     super.key,
     this.file,
     this.initialFilePath,
+    this.initialDisplayPath,
     this.initialContentUri,
+    this.initialName,
   });
 
   @override
@@ -43,7 +47,6 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     _editorScrollController = ScrollController();
     _previewScrollController = ScrollController();
     _tabController = TabController(length: 2, vsync: this);
-
     _loadInitialFile();
     _setupAutoSave();
   }
@@ -63,12 +66,22 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     } else if (widget.initialFilePath != null) {
       final file = await FileService.openFile(widget.initialFilePath!);
       if (file != null) {
-        final updatedFile = file.copyWith(
-          contentUri: widget.initialContentUri ?? file.contentUri,
+        // Use displayPath (real path) for MarkdownFile.path so
+        // display and history deduplication work correctly
+        final displayPath = widget.initialDisplayPath ?? file.path;
+        final contentUri = widget.initialContentUri ?? file.contentUri;
+        final name = widget.initialName ?? file.name;
+        final updatedFile = MarkdownFile(
+          path: displayPath,
+          contentUri: contentUri,
+          name: name,
+          content: file.content,
+          lastModified: file.lastModified,
+          size: file.size,
         );
         setState(() {
           _currentFile = updatedFile;
-          _contentUri = updatedFile.contentUri;
+          _contentUri = contentUri;
           _textController.text = file.content;
         });
         _isModified = false;
@@ -80,23 +93,15 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
   void _setupAutoSave() {
     _textController.addListener(() {
       if (!_isModified) {
-        setState(() {
-          _isModified = true;
-        });
+        setState(() => _isModified = true);
       }
-
-      // 重置自动保存计时器
       _autoSaveTimer?.cancel();
-      _autoSaveTimer = Timer(const Duration(seconds: 30), () {
-        _autoSave();
-      });
+      _autoSaveTimer = Timer(const Duration(seconds: 30), _autoSave);
     });
   }
 
   Future<void> _autoSave() async {
-    if (_currentFile != null && _isModified) {
-      await _saveFile();
-    }
+    if (_currentFile != null && _isModified) await _saveFile();
   }
 
   Future<void> _saveFile() async {
@@ -105,9 +110,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
       return;
     }
 
-    setState(() {
-      _isSaving = true;
-    });
+    setState(() => _isSaving = true);
 
     final success = await FileService.saveFile(
       _currentFile!.path,
@@ -116,23 +119,19 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     );
 
     if (success) {
-      final savedPath = _currentFile!.path;
       final updatedFile = _currentFile!.copyWith(
         content: _textController.text,
         lastModified: DateTime.now(),
         size: _textController.text.length,
       );
-
       setState(() {
         _currentFile = updatedFile;
         _isModified = false;
       });
-
       await HistoryService.addToHistory(updatedFile);
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已保存：$savedPath')),
+          SnackBar(content: Text('已保存：${_currentFile!.name}')),
         );
       }
     } else if (mounted) {
@@ -141,45 +140,44 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
       );
     }
 
-    setState(() {
-      _isSaving = false;
-    });
+    setState(() => _isSaving = false);
   }
 
   Future<void> _saveAs() async {
     final defaultName = _currentFile?.name ?? '未命名.md';
-    final path = await FileService.getSavePath(
+    final result = await FileService.getSavePath(
       defaultName: defaultName,
       content: _textController.text,
     );
 
-    if (path != null) {
-      final success = await FileService.saveFile(path, _textController.text);
-      if (success) {
-        final newFile = MarkdownFile(
-          path: path,
-          name: path.split(RegExp(r'[/\\]')).last,
-          content: _textController.text,
-          lastModified: DateTime.now(),
-          size: _textController.text.length,
-        );
+    if (result != null) {
+      final content = _textController.text;
+      final newFile = MarkdownFile(
+        path: result.displayPath,
+        contentUri: result.contentUri,
+        name: result.name,
+        content: content,
+        lastModified: DateTime.now(),
+        size: content.length,
+      );
 
-        setState(() {
-          _currentFile = newFile;
-          _contentUri = null;
-          _isModified = false;
-        });
+      setState(() {
+        _currentFile = newFile;
+        _contentUri = result.contentUri;
+        _isModified = false;
+      });
 
-        await HistoryService.addToHistory(newFile);
+      await HistoryService.addToHistory(newFile);
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('文件保存成功')),
-          );
-        }
-      } else if (mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('保存失败，请检查文件权限')),
+          SnackBar(content: Text('已保存：${result.name}')),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('保存取消或失败，请重试')),
         );
       }
     }
@@ -188,31 +186,26 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
   Future<void> _insertImage() async {
     final picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-
     if (image != null) {
-      final imagePath = image.path;
-      final imageMarkdown = '![image]($imagePath)';
-
+      final imageMarkdown = '![image](${image.path})';
       final text = _textController.text;
       final selection = _textController.selection;
-
       final newText = text.replaceRange(
-        selection.start,
-        selection.end,
-        imageMarkdown,
-      );
-
+        selection.start, selection.end, imageMarkdown);
       _textController.value = TextEditingValue(
         text: newText,
         selection: TextSelection.collapsed(
-          offset: selection.start + imageMarkdown.length,
-        ),
+          offset: selection.start + imageMarkdown.length),
       );
     }
   }
 
   Future<void> _onPopInvokedWithResult(bool didPop, dynamic result) async {
     if (didPop) return;
+    if (!_isModified) {
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
     final shouldSave = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -230,16 +223,11 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
         ],
       ),
     );
-
     if (shouldSave == true) {
       await _saveFile();
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
+      if (mounted) Navigator.of(context).pop();
     } else if (shouldSave == false) {
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
+      if (mounted) Navigator.of(context).pop();
     }
   }
 
@@ -266,8 +254,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
               const Padding(
                 padding: EdgeInsets.all(16),
                 child: SizedBox(
-                  width: 20,
-                  height: 20,
+                  width: 20, height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
@@ -298,13 +285,8 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildBody() {
-    if (_isDesktop) {
-      return _buildDesktopLayout();
-    } else {
-      return _buildMobileLayout();
-    }
-  }
+  Widget _buildBody() =>
+      _isDesktop ? _buildDesktopLayout() : _buildMobileLayout();
 
   Widget _buildDesktopLayout() {
     return Column(
@@ -317,13 +299,8 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
         Expanded(
           child: Row(
             children: [
-              Expanded(
-                child: _buildEditor(),
-              ),
-              Container(
-                width: 1,
-                color: Theme.of(context).dividerColor,
-              ),
+              Expanded(child: _buildEditor()),
+              Container(width: 1, color: Theme.of(context).dividerColor),
               Expanded(
                 child: MarkdownPreview(
                   data: _textController.text,
@@ -383,9 +360,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
         expands: true,
         textAlignVertical: TextAlignVertical.top,
         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              fontFamily: 'monospace',
-              height: 1.5,
-            ),
+              fontFamily: 'monospace', height: 1.5),
         decoration: const InputDecoration(
           border: InputBorder.none,
           hintText: '开始编写 Markdown...',
