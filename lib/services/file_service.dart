@@ -189,6 +189,20 @@ class FileService {
     }
   }
 
+  // ─── Local content cache (survives app restart) ────────────────────
+
+  /// Persist content to a local cache file and return its path.
+  static Future<String> cacheContent(String content, String name) async {
+    final dir = await getDocumentsDirectory();
+    final cacheDir = Directory('$dir/cache');
+    if (!await cacheDir.exists()) await cacheDir.create(recursive: true);
+    // Use a stable filename based on name so updates overwrite old cache
+    final safeName = name.replaceAll(RegExp(r'[^\w.\-]'), '_');
+    final file = File('${cacheDir.path}/$safeName');
+    await file.writeAsString(content);
+    return file.path;
+  }
+
   static Future<String> createNewFile(String fileName) async {
     final docsDir = await getDocumentsDirectory();
     final filePath = '$docsDir/$fileName';

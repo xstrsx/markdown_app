@@ -68,38 +68,47 @@ class _EditorPageState extends State<EditorPage>
       _contentUri = file.contentUri;
       _cachePath = file.path;
 
-      // Load content — try multiple sources
+      // Load content — try sources in priority order
       var content = file.content;
       if (content.isEmpty) {
-        // History entries have empty content → load from disk/URI
-        content = await _loadContent(file.path, _contentUri);
+        content = await _loadContent(
+          file.contentPath,  // cached copy (best chance)
+          file.path,         // display path / real path
+          _contentUri,       // SAF URI
+        );
       }
       _textController.text = content;
       _isModified = false;
       return;
     }
 
-    // Case 2: fresh pick — load from cache path
+    // Case 2: fresh pick — load from cache path, then persist cache
     if (widget.initialFilePath != null) {
       final cachePath = widget.initialFilePath!;
-      final file = await FileService.openFile(cachePath);
-      if (file != null) {
-        final displayPath = widget.initialDisplayPath ?? file.path;
-        final contentUri = widget.initialContentUri ?? file.contentUri;
-        final name = widget.initialName ?? file.name;
+      final loaded = await FileService.openFile(cachePath);
+      if (loaded != null) {
+        final displayPath = widget.initialDisplayPath ?? loaded.path;
+        final contentUri = widget.initialContentUri;
+        final name = widget.initialName ?? loaded.name;
+        final text = loaded.content;
+
+        // Persist content to permanent cache
+        final contentPath = await FileService.cacheContent(text, name);
+
         final updatedFile = MarkdownFile(
           path: displayPath,
           contentUri: contentUri,
+          contentPath: contentPath,
           name: name,
-          content: file.content,
-          lastModified: file.lastModified,
-          size: file.size,
+          content: text,
+          lastModified: loaded.lastModified,
+          size: loaded.size,
         );
         setState(() {
           _currentFile = updatedFile;
           _contentUri = contentUri;
           _cachePath = cachePath;
-          _textController.text = file.content;
+          _textController.text = text;
         });
         _isModified = false;
         await HistoryService.addToHistory(updatedFile);
@@ -107,32 +116,35 @@ class _EditorPageState extends State<EditorPage>
     }
   }
 
-  /// Try to load content from a file path, falling back to content URI.
-  Future<String> _loadContent(String? path, String? contentUri) async {
-    // 1) Try direct file read
-    if (path != null && path.isNotEmpty && !path.startsWith('content://')) {
+  /// Try to load content from (in order): local cache → real path → SAF URI.
+  Future<String> _loadContent(String? contentPath, String? filePath,
+      String? contentUri) async {
+    // 1) Local persistent cache (created at first open/save)
+    if (contentPath != null && contentPath.isNotEmpty) {
       try {
-        final f = File(path);
+        final f = File(contentPath);
         if (await f.exists()) {
           return await f.readAsString();
         }
       } catch (_) {}
     }
 
-    // 2) Try content URI via platform channel
+    // 2) Direct file read (works on desktop or with MANAGE_EXTERNAL_STORAGE)
+    if (filePath != null &&
+        filePath.isNotEmpty &&
+        !filePath.startsWith('content://')) {
+      try {
+        final f = File(filePath);
+        if (await f.exists()) {
+          return await f.readAsString();
+        }
+      } catch (_) {}
+    }
+
+    // 3) SAF content URI via platform channel
     if (contentUri != null && contentUri.isNotEmpty) {
       final text = await FileService.readContentViaUri(contentUri);
       if (text != null) return text;
-    }
-
-    // 3) If path is a cache file that still exists
-    if (path != null && path.isNotEmpty) {
-      try {
-        final f = File(path);
-        if (await f.exists()) {
-          return await f.readAsString();
-        }
-      } catch (_) {}
     }
 
     return '';
@@ -168,10 +180,15 @@ class _EditorPageState extends State<EditorPage>
     );
 
     if (success) {
+      final name = _currentFile!.name;
+      final content = _textController.text;
+      // Refresh persistent cache
+      final contentPath = await FileService.cacheContent(content, name);
       final updatedFile = _currentFile!.copyWith(
-        content: _textController.text,
+        content: content,
+        contentPath: contentPath,
         lastModified: DateTime.now(),
-        size: _textController.text.length,
+        size: content.length,
       );
       setState(() {
         _currentFile = updatedFile;
@@ -209,13 +226,17 @@ class _EditorPageState extends State<EditorPage>
     );
 
     if (result != null) {
+      final content = _textController.text;
+      // Persist to cache
+      final contentPath = await FileService.cacheContent(content, result.name);
       final newFile = MarkdownFile(
         path: result.displayPath,
         contentUri: result.contentUri,
+        contentPath: contentPath,
         name: result.name,
-        content: _textController.text,
+        content: content,
         lastModified: DateTime.now(),
-        size: _textController.text.length,
+        size: content.length,
       );
       setState(() {
         _currentFile = newFile;
