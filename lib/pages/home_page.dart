@@ -19,6 +19,8 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _loadRecentFiles();
+    // Request storage permission on Android (non-blocking)
+    FileService.ensureStoragePermission();
   }
 
   Future<void> _loadRecentFiles() async {

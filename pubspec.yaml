@@ -30,6 +30,9 @@ dependencies:
   # Image picking
   image_picker: ^1.0.4
   
+  # Permissions
+  permission_handler: ^11.3.1
+
   # Local storage
   shared_preferences: ^2.2.2
   

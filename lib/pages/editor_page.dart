@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/markdown_file.dart';
@@ -27,7 +28,8 @@ class EditorPage extends StatefulWidget {
   State<EditorPage> createState() => _EditorPageState();
 }
 
-class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateMixin {
+class _EditorPageState extends State<EditorPage>
+    with SingleTickerProviderStateMixin {
   late TextEditingController _textController;
   late TabController _tabController;
   late ScrollController _editorScrollController;
@@ -35,6 +37,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
 
   MarkdownFile? _currentFile;
   String? _contentUri;
+  String? _cachePath;
   bool _isModified = false;
   bool _isDesktop = false;
   Timer? _autoSaveTimer;
@@ -58,16 +61,29 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
   }
 
   Future<void> _loadInitialFile() async {
+    // Case 1: file object passed (from recent history or open)
     if (widget.file != null) {
-      _currentFile = widget.file;
-      _contentUri = widget.file!.contentUri;
-      _textController.text = widget.file!.content;
+      final file = widget.file!;
+      _currentFile = file;
+      _contentUri = file.contentUri;
+      _cachePath = file.path;
+
+      // Load content — try multiple sources
+      var content = file.content;
+      if (content.isEmpty) {
+        // History entries have empty content → load from disk/URI
+        content = await _loadContent(file.path, _contentUri);
+      }
+      _textController.text = content;
       _isModified = false;
-    } else if (widget.initialFilePath != null) {
-      final file = await FileService.openFile(widget.initialFilePath!);
+      return;
+    }
+
+    // Case 2: fresh pick — load from cache path
+    if (widget.initialFilePath != null) {
+      final cachePath = widget.initialFilePath!;
+      final file = await FileService.openFile(cachePath);
       if (file != null) {
-        // Use displayPath (real path) for MarkdownFile.path so
-        // display and history deduplication work correctly
         final displayPath = widget.initialDisplayPath ?? file.path;
         final contentUri = widget.initialContentUri ?? file.contentUri;
         final name = widget.initialName ?? file.name;
@@ -82,6 +98,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
         setState(() {
           _currentFile = updatedFile;
           _contentUri = contentUri;
+          _cachePath = cachePath;
           _textController.text = file.content;
         });
         _isModified = false;
@@ -90,11 +107,40 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     }
   }
 
+  /// Try to load content from a file path, falling back to content URI.
+  Future<String> _loadContent(String? path, String? contentUri) async {
+    // 1) Try direct file read
+    if (path != null && path.isNotEmpty && !path.startsWith('content://')) {
+      try {
+        final f = File(path);
+        if (await f.exists()) {
+          return await f.readAsString();
+        }
+      } catch (_) {}
+    }
+
+    // 2) Try content URI via platform channel
+    if (contentUri != null && contentUri.isNotEmpty) {
+      final text = await FileService.readContentViaUri(contentUri);
+      if (text != null) return text;
+    }
+
+    // 3) If path is a cache file that still exists
+    if (path != null && path.isNotEmpty) {
+      try {
+        final f = File(path);
+        if (await f.exists()) {
+          return await f.readAsString();
+        }
+      } catch (_) {}
+    }
+
+    return '';
+  }
+
   void _setupAutoSave() {
     _textController.addListener(() {
-      if (!_isModified) {
-        setState(() => _isModified = true);
-      }
+      if (!_isModified) setState(() => _isModified = true);
       _autoSaveTimer?.cancel();
       _autoSaveTimer = Timer(const Duration(seconds: 30), _autoSave);
     });
@@ -109,11 +155,14 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
       await _saveAs();
       return;
     }
-
     setState(() => _isSaving = true);
 
+    // Write to the best available target:
+    // - contentUri (SAF write-back) → Android
+    // - direct file path → desktop / permission-granted Android
+    final writePath = _getWritablePath();
     final success = await FileService.saveFile(
-      _currentFile!.path,
+      writePath,
       _textController.text,
       contentUri: _contentUri,
     );
@@ -139,8 +188,17 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
         const SnackBar(content: Text('保存失败，请检查文件权限')),
       );
     }
-
     setState(() => _isSaving = false);
+  }
+
+  /// Choose the best path for writing: real FS path > cache path.
+  String _getWritablePath() {
+    if (_currentFile != null) {
+      final p = _currentFile!.path;
+      if (p.isNotEmpty && !p.startsWith('content://')) return p;
+    }
+    if (_cachePath != null && _cachePath!.isNotEmpty) return _cachePath!;
+    return _currentFile?.path ?? '';
   }
 
   Future<void> _saveAs() async {
@@ -151,33 +209,24 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     );
 
     if (result != null) {
-      final content = _textController.text;
       final newFile = MarkdownFile(
         path: result.displayPath,
         contentUri: result.contentUri,
         name: result.name,
-        content: content,
+        content: _textController.text,
         lastModified: DateTime.now(),
-        size: content.length,
+        size: _textController.text.length,
       );
-
       setState(() {
         _currentFile = newFile;
         _contentUri = result.contentUri;
+        _cachePath = result.path;
         _isModified = false;
       });
-
       await HistoryService.addToHistory(newFile);
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('已保存：${result.name}')),
-        );
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('保存取消或失败，请重试')),
         );
       }
     }
@@ -187,15 +236,13 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     final picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
-      final imageMarkdown = '![image](${image.path})';
+      final md = '![image](${image.path})';
       final text = _textController.text;
-      final selection = _textController.selection;
-      final newText = text.replaceRange(
-        selection.start, selection.end, imageMarkdown);
+      final sel = _textController.selection;
+      final newText = text.replaceRange(sel.start, sel.end, md);
       _textController.value = TextEditingValue(
         text: newText,
-        selection: TextSelection.collapsed(
-          offset: selection.start + imageMarkdown.length),
+        selection: TextSelection.collapsed(offset: sel.start + md.length),
       );
     }
   }
@@ -208,16 +255,16 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     }
     final shouldSave = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('保存更改？'),
         content: const Text('您有未保存的更改。离开前要保存吗？'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(ctx).pop(false),
             child: const Text('放弃'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('保存'),
           ),
         ],
@@ -225,10 +272,8 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     );
     if (shouldSave == true) {
       await _saveFile();
-      if (mounted) Navigator.of(context).pop();
-    } else if (shouldSave == false) {
-      if (mounted) Navigator.of(context).pop();
     }
+    if (mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -240,6 +285,8 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     _previewScrollController.dispose();
     super.dispose();
   }
+
+  // ─── Build ────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -260,33 +307,28 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
               ),
             if (_isModified && !_isSaving)
               IconButton(
-                icon: const Icon(Icons.save),
-                tooltip: '保存',
+                icon: const Icon(Icons.save), tooltip: '保存',
                 onPressed: _saveFile,
               ),
             IconButton(
-              icon: const Icon(Icons.save_as),
-              tooltip: '另存为',
+              icon: const Icon(Icons.save_as), tooltip: '另存为',
               onPressed: _saveAs,
             ),
             IconButton(
-              icon: const Icon(Icons.share),
-              tooltip: '分享',
+              icon: const Icon(Icons.share), tooltip: '分享',
               onPressed: () {
                 if (_currentFile != null) {
-                  FileService.shareFile(_currentFile!.path);
+                  FileService.shareContent(
+                    _textController.text, _currentFile!.name);
                 }
               },
             ),
           ],
         ),
-        body: _buildBody(),
+        body: _isDesktop ? _buildDesktopLayout() : _buildMobileLayout(),
       ),
     );
   }
-
-  Widget _buildBody() =>
-      _isDesktop ? _buildDesktopLayout() : _buildMobileLayout();
 
   Widget _buildDesktopLayout() {
     return Column(
@@ -359,8 +401,8 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
         maxLines: null,
         expands: true,
         textAlignVertical: TextAlignVertical.top,
-        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              fontFamily: 'monospace', height: 1.5),
+        style: Theme.of(context)
+            .textTheme.bodyLarge?.copyWith(fontFamily: 'monospace', height: 1.5),
         decoration: const InputDecoration(
           border: InputBorder.none,
           hintText: '开始编写 Markdown...',

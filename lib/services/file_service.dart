@@ -3,17 +3,14 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/markdown_file.dart';
 
 class PickResult {
-  /// Local cache path for reading file content
   final String path;
-  /// Resolved real path or URI string for display / history dedup
   final String displayPath;
-  /// Android content URI for writing back via SAF
   final String? contentUri;
-  /// File name
   final String name;
 
   PickResult({
@@ -27,6 +24,25 @@ class PickResult {
 class FileService {
   static const _channel = MethodChannel('com.xstrsx.mdeditor/file');
 
+  // ─── Permission ───────────────────────────────────────────────────────
+
+  static Future<bool> ensureStoragePermission() async {
+    if (!Platform.isAndroid) return true;
+
+    var status = await Permission.manageExternalStorage.status;
+    if (status.isGranted) return true;
+
+    status = await Permission.manageExternalStorage.request();
+    if (status.isGranted) return true;
+
+    if (status.isPermanentlyDenied) {
+      await openAppSettings();
+    }
+    return false;
+  }
+
+  // ─── Pick ─────────────────────────────────────────────────────────────
+
   static Future<PickResult?> pickMarkdownFile() async {
     if (Platform.isAndroid) {
       try {
@@ -36,18 +52,23 @@ class FileService {
         if (result == null) return null;
         final realPath = result['realPath'] as String? ?? '';
         final uri = result['uri'] as String? ?? '';
+        final name = result['name'] as String? ?? 'unknown.md';
+
+        // displayPath: real filesystem path if resolved, otherwise filename only
+        final displayPath = realPath.isNotEmpty ? realPath : name;
+
         return PickResult(
           path: result['path'] as String,
-          displayPath: realPath.isNotEmpty ? realPath : uri,
+          displayPath: displayPath,
           contentUri: uri.isNotEmpty ? uri : null,
-          name: result['name'] as String? ?? 'unknown.md',
+          name: name,
         );
       } catch (e) {
         return null;
       }
     }
 
-    // Desktop: use file_picker
+    // Desktop
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['md', 'markdown', 'txt'],
@@ -62,6 +83,8 @@ class FileService {
     );
   }
 
+  // ─── Read ─────────────────────────────────────────────────────────────
+
   static Future<MarkdownFile?> openFile(String path) async {
     try {
       final file = File(path);
@@ -72,18 +95,30 @@ class FileService {
     }
   }
 
-  /// Save text content to a file.
-  /// On Android: writes back to the original URI if available.
+  /// Read file content from a content URI via platform channel.
+  static Future<String?> readContentViaUri(String contentUri) async {
+    if (!Platform.isAndroid) return null;
+    try {
+      return await _channel.invokeMethod<String>('readFile', {
+        'uri': contentUri,
+      });
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ─── Save ─────────────────────────────────────────────────────────────
+
   static Future<bool> saveFile(String path, String content,
       {String? contentUri}) async {
     try {
-      if (Platform.isAndroid &&
-          contentUri != null &&
-          contentUri.isNotEmpty) {
+      if (Platform.isAndroid && contentUri != null && contentUri.isNotEmpty) {
         await _channel.invokeMethod('writeToUri', {
           'uri': contentUri,
           'content': content,
         });
+        // Also update local cache
+        try { File(path).writeAsStringSync(content); } catch (_) {}
         return true;
       }
       final file = File(path);
@@ -94,7 +129,8 @@ class FileService {
     }
   }
 
-  /// Show "Save As" dialog.
+  // ─── Save As ──────────────────────────────────────────────────────────
+
   static Future<PickResult?> getSavePath({
     String defaultName = '未命名.md',
     String content = '',
@@ -108,18 +144,20 @@ class FileService {
         if (result == null) return null;
         final realPath = result['realPath'] as String? ?? '';
         final uri = result['uri'] as String? ?? '';
+        final name = result['name'] as String? ?? defaultName;
+        final displayPath = realPath.isNotEmpty ? realPath : name;
         return PickResult(
           path: result['path'] as String,
-          displayPath: realPath.isNotEmpty ? realPath : uri,
+          displayPath: displayPath,
           contentUri: uri.isNotEmpty ? uri : null,
-          name: result['name'] as String? ?? defaultName,
+          name: name,
         );
       } catch (e) {
         return null;
       }
     }
 
-    // Desktop: use file_picker
+    // Desktop
     try {
       final bytes = Uint8List.fromList(utf8.encode(content));
       final outputPath = await FilePicker.platform.saveFile(
@@ -138,6 +176,8 @@ class FileService {
       return null;
     }
   }
+
+  // ─── Create / Share / Open location ───────────────────────────────────
 
   static Future<String> getDocumentsDirectory() async {
     try {
@@ -159,6 +199,20 @@ class FileService {
     return filePath;
   }
 
+  /// Share the current content. On Android, writes to a temp file first
+  /// since the "path" may be a content URI that share_plus can't handle.
+  static Future<void> shareContent(String text, String name) async {
+    try {
+      final dir = await getDocumentsDirectory();
+      final tempFile = File('$dir/$name');
+      await tempFile.writeAsString(text);
+      await Share.shareXFiles([XFile(tempFile.path)], text: '分享 Markdown 文件');
+    } catch (e) {
+      // Fallback: share as plain text
+      await Share.share(text, subject: name);
+    }
+  }
+
   static Future<void> shareFile(String path) async {
     await Share.shareXFiles([XFile(path)], text: '分享 Markdown 文件');
   }
@@ -168,7 +222,6 @@ class FileService {
     try {
       if (Platform.isAndroid) {
         await _channel.invokeMethod('openFileLocation', {'path': path});
-        // On Android, the native side shows a Toast — no need for extra feedback
       } else if (Platform.isWindows) {
         final result = await Process.run('explorer', ['/select,$path']);
         if (result.exitCode != 0) {

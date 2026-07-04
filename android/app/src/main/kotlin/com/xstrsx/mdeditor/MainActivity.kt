@@ -41,6 +41,15 @@ class MainActivity : FlutterActivity() {
                         val fileName = call.argument<String>("fileName") ?: "未命名.md"
                         startSaveFileIntent(fileName)
                     }
+                    "readFile" -> {
+                        val uriString = call.argument<String>("uri")
+                        if (uriString != null) {
+                            val content = readFileFromUri(Uri.parse(uriString))
+                            result.success(content)
+                        } else {
+                            result.error("ARGS", "uri required", null)
+                        }
+                    }
                     "writeToUri" -> {
                         val uriString = call.argument<String>("uri")
                         val content = call.argument<String>("content")
@@ -171,6 +180,14 @@ class MainActivity : FlutterActivity() {
     }
 
     // ─── Write to URI ──────────────────────────────────────────────────
+
+    private fun readFileFromUri(uri: Uri): String? {
+        return try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                input.bufferedReader().readText()
+            }
+        } catch (e: Exception) { null }
+    }
 
     private fun writeToUri(uri: Uri, content: String) {
         contentResolver.openOutputStream(uri, "wt")?.use { output ->
