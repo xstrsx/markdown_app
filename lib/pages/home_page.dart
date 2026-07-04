@@ -76,12 +76,15 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openFile() async {
-    final path = await FileService.pickMarkdownFile();
+    final result = await FileService.pickMarkdownFile();
 
-    if (path != null && mounted) {
+    if (result != null && mounted) {
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => EditorPage(initialFilePath: path),
+          builder: (context) => EditorPage(
+            initialFilePath: result.path,
+            initialContentUri: result.contentUri,
+          ),
         ),
       ).then((_) => _loadRecentFiles());
     }

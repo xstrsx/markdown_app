@@ -10,11 +10,13 @@ import '../widgets/markdown_preview.dart';
 class EditorPage extends StatefulWidget {
   final MarkdownFile? file;
   final String? initialFilePath;
+  final String? initialContentUri;
 
   const EditorPage({
     super.key,
     this.file,
     this.initialFilePath,
+    this.initialContentUri,
   });
 
   @override
@@ -28,6 +30,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
   late ScrollController _previewScrollController;
 
   MarkdownFile? _currentFile;
+  String? _contentUri;
   bool _isModified = false;
   bool _isDesktop = false;
   Timer? _autoSaveTimer;
@@ -54,17 +57,22 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
   Future<void> _loadInitialFile() async {
     if (widget.file != null) {
       _currentFile = widget.file;
+      _contentUri = widget.file!.contentUri;
       _textController.text = widget.file!.content;
       _isModified = false;
     } else if (widget.initialFilePath != null) {
       final file = await FileService.openFile(widget.initialFilePath!);
       if (file != null) {
+        final updatedFile = file.copyWith(
+          contentUri: widget.initialContentUri ?? file.contentUri,
+        );
         setState(() {
-          _currentFile = file;
+          _currentFile = updatedFile;
+          _contentUri = updatedFile.contentUri;
           _textController.text = file.content;
         });
         _isModified = false;
-        await HistoryService.addToHistory(file);
+        await HistoryService.addToHistory(updatedFile);
       }
     }
   }
@@ -104,6 +112,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
     final success = await FileService.saveFile(
       _currentFile!.path,
       _textController.text,
+      contentUri: _contentUri,
     );
 
     if (success) {
@@ -154,6 +163,7 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
 
         setState(() {
           _currentFile = newFile;
+          _contentUri = null;
           _isModified = false;
         });
 

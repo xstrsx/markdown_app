@@ -5,16 +5,33 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/markdown_file.dart';
 
+class PickResult {
+  final String path;
+  final String? contentUri;
+
+  PickResult({required this.path, this.contentUri});
+}
+
 class FileService {
-  static Future<String?> pickMarkdownFile() async {
+  static const _channel = MethodChannel('com.xstrsx.mdeditor/file');
+
+  /// Pick a markdown file. On Android, also captures the original content URI
+  /// so we can write back to the original file location.
+  static Future<PickResult?> pickMarkdownFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['md', 'markdown', 'txt'],
+      withData: false,
     );
-    if (result != null && result.files.single.path != null) {
-      return result.files.single.path!;
-    }
-    return null;
+    if (result == null || result.files.isEmpty) return null;
+
+    final file = result.files.single;
+    if (file.path == null) return null;
+
+    return PickResult(
+      path: file.path!,
+      contentUri: Platform.isAndroid ? file.identifier : null,
+    );
   }
 
   static Future<MarkdownFile?> openFile(String path) async {
@@ -29,8 +46,31 @@ class FileService {
     }
   }
 
-  static Future<bool> saveFile(String path, String content) async {
+  /// Save text content to a file path.
+  /// On Android with a content URI, writes back to the original file via SAF.
+  static Future<bool> saveFile(String path, String content,
+      {String? contentUri}) async {
     try {
+      if (Platform.isAndroid && contentUri != null && contentUri.isNotEmpty) {
+        // Write back to original file via content URI
+        final result = await _channel.invokeMethod<bool>('writeToUri', {
+          'uri': contentUri,
+          'content': content,
+        });
+        if (result == true) return true;
+        // Fallback: try resolving real path and writing directly
+        final realPath =
+            await _channel.invokeMethod<String>('getRealPath', {
+          'uri': contentUri,
+        });
+        if (realPath != null && realPath.isNotEmpty) {
+          final file = File(realPath);
+          await file.writeAsString(content);
+          return true;
+        }
+        return false;
+      }
+      // Desktop / direct file path
       final file = File(path);
       await file.writeAsString(content);
       return true;
@@ -39,14 +79,14 @@ class FileService {
     }
   }
 
-  static Future<String?> getSavePath({String defaultName = 'untitled.md'}) async {
+  /// Show a "Save As" dialog. On Android uses file_picker's saveFile.
+  static Future<String?> getSavePath({String defaultName = '未命名.md'}) async {
     try {
       final outputPath = await FilePicker.platform.saveFile(
         dialogTitle: '保存 Markdown 文件',
         fileName: defaultName,
-        type: FileType.custom,
-        allowedExtensions: ['md'],
-        lockParentWindow: true,
+        type: FileType.any,
+        bytes: null,
       );
       return outputPath;
     } catch (e) {
@@ -80,13 +120,19 @@ class FileService {
     await Share.shareXFiles([XFile(path)], text: '分享 Markdown 文件');
   }
 
-  /// 在文件管理器中打开文件所在位置，如果失败则将路径复制到剪贴板
-  static Future<void> openFileLocation(String path) async {
+  /// Open the file's parent folder in the platform file manager.
+  static Future<void> openFileLocation(String path,
+      {String? contentUri}) async {
     try {
-      if (Platform.isWindows) {
+      if (Platform.isAndroid) {
+        // Use Android intent via MethodChannel
+        await _channel.invokeMethod('openFileLocation', {
+          'path': path,
+          'uri': contentUri ?? '',
+        });
+      } else if (Platform.isWindows) {
         final result = await Process.run('explorer', ['/select,$path']);
         if (result.exitCode != 0) {
-          // 如果 explorer 失败，尝试只打开父目录
           final dir = path.substring(0, path.lastIndexOf(RegExp(r'[/\\]')));
           await Process.run('explorer', [dir]);
         }

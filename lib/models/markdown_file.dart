@@ -2,6 +2,7 @@ import 'dart:io';
 
 class MarkdownFile {
   final String path;
+  final String? contentUri;
   final String name;
   final String content;
   final DateTime lastModified;
@@ -9,6 +10,7 @@ class MarkdownFile {
 
   MarkdownFile({
     required this.path,
+    this.contentUri,
     required this.name,
     required this.content,
     required this.lastModified,
@@ -33,6 +35,7 @@ class MarkdownFile {
 
   MarkdownFile copyWith({
     String? path,
+    String? contentUri,
     String? name,
     String? content,
     DateTime? lastModified,
@@ -40,6 +43,7 @@ class MarkdownFile {
   }) {
     return MarkdownFile(
       path: path ?? this.path,
+      contentUri: contentUri ?? this.contentUri,
       name: name ?? this.name,
       content: content ?? this.content,
       lastModified: lastModified ?? this.lastModified,

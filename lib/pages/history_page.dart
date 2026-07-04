@@ -148,7 +148,8 @@ class _HistoryPageState extends State<HistoryPage> {
               title: const Text('打开文件所在位置'),
               onTap: () {
                 Navigator.of(context).pop();
-                FileService.openFileLocation(file.path);
+                FileService.openFileLocation(file.path,
+                    contentUri: file.contentUri);
               },
             ),
             const Divider(),
