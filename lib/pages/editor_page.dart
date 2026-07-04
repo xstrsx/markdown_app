@@ -148,7 +148,10 @@ class _EditorPageState extends State<EditorPage> with SingleTickerProviderStateM
 
   Future<void> _saveAs() async {
     final defaultName = _currentFile?.name ?? '未命名.md';
-    final path = await FileService.getSavePath(defaultName: defaultName);
+    final path = await FileService.getSavePath(
+      defaultName: defaultName,
+      content: _textController.text,
+    );
 
     if (path != null) {
       final success = await FileService.saveFile(path, _textController.text);
