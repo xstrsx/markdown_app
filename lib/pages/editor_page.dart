@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import '../models/markdown_file.dart';
 import '../services/file_service.dart';
 import '../services/history_service.dart';
@@ -249,25 +248,79 @@ class _EditorPageState extends State<EditorPage>
     }
   }
 
+  void _insertAtCursor(String before, String middle, String after) {
+    final text = _textController.text;
+    final sel = _textController.selection;
+    final start = (sel.start >= 0 && sel.start <= text.length)
+        ? sel.start
+        : text.length;
+    final end = (sel.end >= 0 && sel.end <= text.length && sel.end >= start)
+        ? sel.end
+        : start;
+    final selected = text.substring(start, end);
+    final insertion = before + (selected.isNotEmpty ? selected : middle) + after;
+    final newText = text.replaceRange(start, end, insertion);
+    _textController.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: start + insertion.length),
+    );
+  }
+
   Future<void> _insertImage() async {
-    final picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      final md = '![image](${image.path})';
-      final text = _textController.text;
-      final sel = _textController.selection;
-      final start = (sel.start >= 0 && sel.start <= text.length)
-          ? sel.start
-          : text.length;
-      final end = (sel.end >= 0 && sel.end <= text.length &&
-              sel.end >= start)
-          ? sel.end
-          : start;
-      final newText = text.replaceRange(start, end, md);
-      _textController.value = TextEditingValue(
-        text: newText,
-        selection: TextSelection.collapsed(offset: start + md.length),
-      );
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('插入图片'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: '请输入图片地址'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text),
+            child: const Text('确认'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result != null && result.isNotEmpty) {
+      _insertAtCursor('![', 'image', ']($result)');
+    }
+  }
+
+  Future<void> _insertLink() async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('插入链接'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: '请输入链接地址'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text),
+            child: const Text('确认'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result != null && result.isNotEmpty) {
+      _insertAtCursor('[', '链接', ']($result)');
     }
   }
 
@@ -360,8 +413,8 @@ class _EditorPageState extends State<EditorPage>
       children: [
         EditorToolbar(
           controller: _textController,
-          onInsertImage: (_) => _insertImage(),
-          onInsertLink: (_) {},
+          onInsertImage: _insertImage,
+          onInsertLink: _insertLink,
         ),
         Expanded(
           child: Row(
@@ -399,8 +452,8 @@ class _EditorPageState extends State<EditorPage>
                 children: [
                   EditorToolbar(
                     controller: _textController,
-                    onInsertImage: (_) => _insertImage(),
-                    onInsertLink: (_) {},
+                    onInsertImage: _insertImage,
+                    onInsertLink: _insertLink,
                   ),
                   Expanded(child: _buildEditor()),
                 ],

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 class EditorToolbar extends StatelessWidget {
   final TextEditingController controller;
-  final Function(String) onInsertImage;
-  final Function(String) onInsertLink;
+  final VoidCallback onInsertImage;
+  final VoidCallback onInsertLink;
 
   const EditorToolbar({
     super.key,
@@ -153,12 +153,12 @@ class EditorToolbar extends StatelessWidget {
           _buildToolbarButton(
             icon: Icons.link,
             tooltip: '链接',
-            onPressed: () => onInsertLink('url'),
+            onPressed: onInsertLink,
           ),
           _buildToolbarButton(
             icon: Icons.image,
             tooltip: '图片',
-            onPressed: () => onInsertImage('image_url'),
+            onPressed: onInsertImage,
           ),
           _buildDivider(),
           _buildToolbarButton(
