@@ -21,6 +21,24 @@ class PickResult {
   });
 }
 
+enum FileDeletionStatus {
+  success,
+  notFound,
+  permissionDenied,
+  unsupported,
+  invalidTarget,
+  failed,
+}
+
+class FileDeletionResult {
+  final FileDeletionStatus status;
+  final String? message;
+
+  const FileDeletionResult(this.status, {this.message});
+
+  bool get isSuccess => status == FileDeletionStatus.success;
+}
+
 class FileService {
   static const _channel = MethodChannel('com.xstrsx.mdeditor/file');
 
@@ -118,7 +136,9 @@ class FileService {
           'content': content,
         });
         // Also update local cache
-        try { File(path).writeAsStringSync(content); } catch (_) {}
+        try {
+          File(path).writeAsStringSync(content);
+        } catch (_) {}
         return true;
       }
       final file = File(path);
@@ -256,6 +276,99 @@ class FileService {
       }
     } catch (e) {
       await Clipboard.setData(ClipboardData(text: path));
+    }
+  }
+
+  static Future<FileDeletionResult> deleteOriginalFile(
+      MarkdownFile markdownFile) async {
+    if (Platform.isAndroid &&
+        markdownFile.contentUri != null &&
+        markdownFile.contentUri!.isNotEmpty) {
+      final uriResult = await _deleteAndroidDocument(markdownFile.contentUri!);
+      if (uriResult.isSuccess || !_isValidDirectFilePath(markdownFile.path)) {
+        return uriResult;
+      }
+
+      if (!await ensureStoragePermission()) {
+        return const FileDeletionResult(
+          FileDeletionStatus.permissionDenied,
+          message: '没有删除原文件的权限',
+        );
+      }
+    }
+
+    if (!_isValidDirectFilePath(markdownFile.path)) {
+      return const FileDeletionResult(
+        FileDeletionStatus.invalidTarget,
+        message: '无法确定原文件位置',
+      );
+    }
+
+    final file = File(markdownFile.path);
+    try {
+      final type = await FileSystemEntity.type(markdownFile.path);
+      if (type == FileSystemEntityType.notFound) {
+        return const FileDeletionResult(FileDeletionStatus.notFound);
+      }
+      if (type != FileSystemEntityType.file) {
+        return const FileDeletionResult(FileDeletionStatus.invalidTarget);
+      }
+      await file.delete();
+      return const FileDeletionResult(FileDeletionStatus.success);
+    } on FileSystemException catch (error) {
+      final code = error.osError?.errorCode;
+      if (code == 5 || code == 13) {
+        return const FileDeletionResult(FileDeletionStatus.permissionDenied);
+      }
+      return FileDeletionResult(
+        FileDeletionStatus.failed,
+        message: error.message,
+      );
+    } catch (error) {
+      return FileDeletionResult(
+        FileDeletionStatus.failed,
+        message: error.toString(),
+      );
+    }
+  }
+
+  static Future<FileDeletionResult> _deleteAndroidDocument(String uri) async {
+    try {
+      final raw =
+          await _channel.invokeMethod<Map>('deleteDocument', {'uri': uri});
+      final status = raw?['status'] as String?;
+      return FileDeletionResult(
+        switch (status) {
+          'success' => FileDeletionStatus.success,
+          'notFound' => FileDeletionStatus.notFound,
+          'permissionDenied' => FileDeletionStatus.permissionDenied,
+          'unsupported' => FileDeletionStatus.unsupported,
+          _ => FileDeletionStatus.failed,
+        },
+        message: raw?['message'] as String?,
+      );
+    } on PlatformException catch (error) {
+      return FileDeletionResult(
+        FileDeletionStatus.failed,
+        message: error.message,
+      );
+    }
+  }
+
+  static bool _isValidDirectFilePath(String path) {
+    if (path.isEmpty || path.startsWith('content://')) return false;
+    return File(path).isAbsolute;
+  }
+
+  static Future<bool> deleteCachedContent(MarkdownFile markdownFile) async {
+    final path = markdownFile.contentPath;
+    if (path == null || path.isEmpty) return true;
+    try {
+      final cacheFile = File(path);
+      if (await cacheFile.exists()) await cacheFile.delete();
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 

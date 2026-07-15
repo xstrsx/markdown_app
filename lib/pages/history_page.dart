@@ -36,11 +36,13 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   void _openFile(MarkdownFile file) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => EditorPage(file: file),
-      ),
-    ).then((_) => _loadHistory());
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (context) => EditorPage(file: file),
+          ),
+        )
+        .then((_) => _loadHistory());
   }
 
   void _showFileDetails(MarkdownFile file) {
@@ -97,7 +99,7 @@ class _HistoryPageState extends State<HistoryPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('删除历史'),
-        content: Text('从历史中删除"${file.name}"？'),
+        content: Text('从历史中删除"${file.name}"？原文件不会被删除。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -116,8 +118,66 @@ class _HistoryPageState extends State<HistoryPage> {
 
     if (confirm == true) {
       await HistoryService.removeFromHistory(file.path);
-      _loadHistory();
+      if (!mounted) return;
+      await _loadHistory();
     }
+  }
+
+  Future<void> _deleteOriginalFile(MarkdownFile file) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除原文件'),
+        content: Text(
+          '确定要删除原文件“${file.name}”吗？\n\n'
+          '文件将从设备或存储提供程序中永久删除，此操作无法撤销。'
+          '删除成功后，该记录也会从历史中移除。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('删除原文件'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final result = await FileService.deleteOriginalFile(file);
+    if (!mounted) return;
+
+    if (result.isSuccess) {
+      final cacheDeleted = await FileService.deleteCachedContent(file);
+      await HistoryService.removeFromHistory(file.path);
+      if (!mounted) return;
+      await _loadHistory();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(cacheDeleted ? '原文件已删除' : '原文件已删除，缓存清理失败'),
+        ),
+      );
+      return;
+    }
+
+    final message = switch (result.status) {
+      FileDeletionStatus.notFound => '未找到原文件。历史记录未删除，您仍可选择“从历史中删除”。',
+      FileDeletionStatus.permissionDenied => '没有删除原文件的权限。历史记录未删除。',
+      FileDeletionStatus.unsupported => '当前存储位置不支持删除此文件。历史记录未删除。',
+      FileDeletionStatus.invalidTarget => '无法确定原文件位置。历史记录未删除。',
+      _ => '删除原文件失败，请稍后重试。历史记录未删除。',
+    };
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   void _showContextMenu(MarkdownFile file) {
@@ -165,6 +225,20 @@ class _HistoryPageState extends State<HistoryPage> {
               onTap: () {
                 Navigator.of(context).pop();
                 _deleteHistory(file);
+              },
+            ),
+            ListTile(
+              leading: Icon(
+                Icons.delete_forever,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              title: Text(
+                '删除原文件',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+              onTap: () {
+                Navigator.of(context).pop();
+                _deleteOriginalFile(file);
               },
             ),
           ],
@@ -296,14 +370,22 @@ class _HistoryPageState extends State<HistoryPage> {
                     Text(
                       '${FileService.formatFileSize(file.size)} • ${_formatDate(file.lastModified)}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.7),
+                            color: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.color
+                                ?.withValues(alpha: 0.7),
                           ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       file.path,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).textTheme.bodySmall?.color?.withValues(alpha: 0.5),
+                            color: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.color
+                                ?.withValues(alpha: 0.5),
                           ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

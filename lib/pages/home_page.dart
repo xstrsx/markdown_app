@@ -19,8 +19,6 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _loadRecentFiles();
-    // Request storage permission on Android (non-blocking)
-    FileService.ensureStoragePermission();
   }
 
   Future<void> _loadRecentFiles() async {
@@ -70,11 +68,13 @@ class _HomePageState extends State<HomePage> {
       final filePath = await FileService.createNewFile(fileName);
 
       if (mounted) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => EditorPage(initialFilePath: filePath),
-          ),
-        ).then((_) => _loadRecentFiles());
+        Navigator.of(context)
+            .push(
+              MaterialPageRoute(
+                builder: (context) => EditorPage(initialFilePath: filePath),
+              ),
+            )
+            .then((_) => _loadRecentFiles());
       }
     }
   }
@@ -83,25 +83,29 @@ class _HomePageState extends State<HomePage> {
     final result = await FileService.pickMarkdownFile();
 
     if (result != null && mounted) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => EditorPage(
-            initialFilePath: result.path,
-            initialDisplayPath: result.displayPath,
-            initialContentUri: result.contentUri,
-            initialName: result.name,
-          ),
-        ),
-      ).then((_) => _loadRecentFiles());
+      Navigator.of(context)
+          .push(
+            MaterialPageRoute(
+              builder: (context) => EditorPage(
+                initialFilePath: result.path,
+                initialDisplayPath: result.displayPath,
+                initialContentUri: result.contentUri,
+                initialName: result.name,
+              ),
+            ),
+          )
+          .then((_) => _loadRecentFiles());
     }
   }
 
   void _openRecentFile(MarkdownFile file) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => EditorPage(file: file),
-      ),
-    ).then((_) => _loadRecentFiles());
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (context) => EditorPage(file: file),
+          ),
+        )
+        .then((_) => _loadRecentFiles());
   }
 
   @override
@@ -133,7 +137,11 @@ class _HomePageState extends State<HomePage> {
                 Text(
                   '创建和编辑精美的 Markdown 文档',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Theme.of(context).textTheme.bodyLarge?.color?.withValues(alpha: 0.7),
+                        color: Theme.of(context)
+                            .textTheme
+                            .bodyLarge
+                            ?.color
+                            ?.withValues(alpha: 0.7),
                       ),
                   textAlign: TextAlign.center,
                 ),

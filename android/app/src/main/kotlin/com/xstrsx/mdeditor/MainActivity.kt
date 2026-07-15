@@ -60,6 +60,14 @@ class MainActivity : FlutterActivity() {
                             result.error("ARGS", "uri and content required", null)
                         }
                     }
+                    "deleteDocument" -> {
+                        val uriString = call.argument<String>("uri")
+                        if (uriString != null) {
+                            result.success(deleteDocument(Uri.parse(uriString)))
+                        } else {
+                            result.success(deleteResult("unsupported", "无效的文件地址"))
+                        }
+                    }
                     "openFileLocation" -> {
                         val path = call.argument<String>("path")
                         if (path != null) {
@@ -195,6 +203,35 @@ class MainActivity : FlutterActivity() {
             output.write(content.toByteArray(Charsets.UTF_8)); output.flush()
         }
     }
+
+    // ─── Delete document ─────────────────────────────────────────────────
+
+    private fun deleteDocument(uri: Uri): Map<String, String> {
+        if (uri.scheme != "content") {
+            return deleteResult("unsupported", "当前文件地址不支持系统删除")
+        }
+
+        return try {
+            val deleted = try {
+                DocumentsContract.deleteDocument(contentResolver, uri)
+            } catch (_: UnsupportedOperationException) {
+                contentResolver.delete(uri, null, null) > 0
+            }
+            if (deleted) deleteResult("success", "原文件已删除")
+            else deleteResult("unsupported", "存储提供方拒绝删除此文件")
+        } catch (_: SecurityException) {
+            deleteResult("permissionDenied", "没有删除原文件的权限")
+        } catch (_: FileNotFoundException) {
+            deleteResult("notFound", "原文件不存在")
+        } catch (_: UnsupportedOperationException) {
+            deleteResult("unsupported", "当前存储提供方不支持删除")
+        } catch (error: Exception) {
+            deleteResult("failed", error.message ?: "删除原文件失败")
+        }
+    }
+
+    private fun deleteResult(status: String, message: String): Map<String, String> =
+        mapOf("status" to status, "message" to message)
 
     // ─── Open file location ────────────────────────────────────────────
 
