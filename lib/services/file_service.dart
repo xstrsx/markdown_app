@@ -259,7 +259,10 @@ class FileService {
       {String? contentUri}) async {
     try {
       if (Platform.isAndroid) {
-        await _channel.invokeMethod('openFileLocation', {'path': path});
+        await _channel.invokeMethod('openFileLocation', {
+          'path': path,
+          'contentUri': contentUri ?? '',
+        });
       } else if (Platform.isWindows) {
         final result = await Process.run('explorer', ['/select,$path']);
         if (result.exitCode != 0) {

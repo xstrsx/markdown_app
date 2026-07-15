@@ -70,8 +70,9 @@ class MainActivity : FlutterActivity() {
                     }
                     "openFileLocation" -> {
                         val path = call.argument<String>("path")
+                        val contentUri = call.argument<String>("contentUri")
                         if (path != null) {
-                            openLocation(path)
+                            openLocation(path, contentUri)
                             result.success(true)
                         } else {
                             result.success(null)
@@ -235,11 +236,27 @@ class MainActivity : FlutterActivity() {
 
     // ─── Open file location ────────────────────────────────────────────
 
-    private fun openLocation(path: String) {
+    private fun openLocation(path: String, contentUri: String?) {
         try {
+            // SAF URI is the authoritative original-file identity. The cache path
+            // passed in [path] must never be used for locating the original.
+            if (!contentUri.isNullOrBlank()) {
+                val uri = Uri.parse(contentUri)
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, contentResolver.getType(uri) ?: "text/*")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                if (intent.resolveActivity(packageManager) != null) {
+                    startActivity(intent)
+                    return
+                }
+            }
+
             val file = File(path)
             if (!file.exists()) {
-                showToast("文件不存在"); return
+                showToast("无法定位原文件，请重新选择文件")
+                return
             }
             val parent = if (file.isDirectory) file else file.parentFile ?: return
 
