@@ -37,7 +37,7 @@ abstract class HeadlessSvgBridge {
   Future<void> dispose();
 }
 
-typedef HeadlessSvgBridgeFactory = HeadlessSvgBridge Function();
+typedef HeadlessSvgBridgeFactory = FutureOr<HeadlessSvgBridge> Function();
 typedef WebView2Availability = Future<bool> Function();
 
 class HeadlessWebViewRenderer implements SvgRenderer {
@@ -74,7 +74,7 @@ class HeadlessWebViewRenderer implements SvgRenderer {
 
     HeadlessSvgBridge? bridge;
     try {
-      bridge = bridgeFactory();
+      bridge = await bridgeFactory();
       final svg = await bridge.render(type, content);
       if (svg == null || svg.trim().isEmpty) {
         return const SvgRenderResult(
@@ -98,8 +98,14 @@ class HeadlessWebViewRenderer implements SvgRenderer {
     }
   }
 
-  static HeadlessSvgBridge _createProductionBridge() =>
-      _InAppWebViewSvgBridge();
+  static Future<HeadlessSvgBridge> _createProductionBridge() async {
+    WebViewEnvironment? webViewEnvironment;
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      // WebView2 must be initialized before a Windows headless view is run.
+      webViewEnvironment = await WebViewEnvironment.create();
+    }
+    return _InAppWebViewSvgBridge(webViewEnvironment: webViewEnvironment);
+  }
 
   static Future<bool> _checkWebView2() async {
     return (await WebViewEnvironment.getAvailableVersion()) != null;
@@ -107,13 +113,16 @@ class HeadlessWebViewRenderer implements SvgRenderer {
 }
 
 class _InAppWebViewSvgBridge implements HeadlessSvgBridge {
+  late final WebViewEnvironment? _webViewEnvironment;
   late final HeadlessInAppWebView _webView;
   final Completer<InAppWebViewController> _controllerCompleter =
       Completer<InAppWebViewController>();
   final Completer<void> _loadCompleter = Completer<void>();
 
-  _InAppWebViewSvgBridge() {
+  _InAppWebViewSvgBridge({WebViewEnvironment? webViewEnvironment}) {
+    _webViewEnvironment = webViewEnvironment;
     _webView = HeadlessInAppWebView(
+      webViewEnvironment: webViewEnvironment,
       initialFile: 'assets/render_assets/render.html',
       onWebViewCreated: (controller) {
         // The page remains offline; all rendering libraries are local assets.
@@ -142,5 +151,8 @@ class _InAppWebViewSvgBridge implements HeadlessSvgBridge {
   }
 
   @override
-  Future<void> dispose() => _webView.dispose();
+  Future<void> dispose() async {
+    await _webView.dispose();
+    await _webViewEnvironment?.dispose();
+  }
 }
