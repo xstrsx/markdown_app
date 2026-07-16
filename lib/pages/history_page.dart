@@ -16,6 +16,7 @@ class HistoryPage extends StatefulWidget {
 class _HistoryPageState extends State<HistoryPage> {
   List<MarkdownFile> _history = [];
   bool _isLoading = true;
+  bool _isExportingPdf = false;
 
   @override
   void initState() {
@@ -47,23 +48,31 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> _exportPdf(MarkdownFile file) async {
-    final content = await _loadMarkdownContent(file);
-    if (!mounted) return;
-    if (content == null || content.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('无法读取文件内容，无法导出 PDF')),
-      );
-      return;
-    }
+    if (_isExportingPdf) return;
+    setState(() => _isExportingPdf = true);
+    _showExportProgress('正在准备 PDF 导出...');
 
     try {
-      final title = file.name
-          .replaceAll(RegExp(r'\.md$|\.markdown$', caseSensitive: false), '');
+      final content = await _loadMarkdownContent(file);
+      if (!mounted) return;
+      if (content == null || content.isEmpty) {
+        _showExportMessage('无法读取文件内容，无法导出 PDF');
+        return;
+      }
+
+      _showExportProgress('正在生成 PDF，请稍候...');
+      final title = file.name.replaceAll(
+        RegExp(r'\.md$|\.markdown$', caseSensitive: false),
+        '',
+      );
       final result = await PdfExportService.generate(
         markdown: content,
         options: PdfExportOptions(title: title),
         sourceDirectory: _sourceDirectoryOf(file),
       );
+      if (!mounted) return;
+
+      _showExportProgress('PDF 已生成，正在打开保存位置...');
       final saveResult = await FileService.saveBytesAs(
         defaultName: title,
         bytes: result.bytes,
@@ -72,24 +81,46 @@ class _HistoryPageState extends State<HistoryPage> {
       if (!mounted) return;
       if (saveResult.status == FileSaveStatus.cancelled) return;
       if (saveResult.isSuccess) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              result.warnings.isEmpty ? 'PDF 已导出' : 'PDF 已导出，部分内容已降级处理',
-            ),
-          ),
+        _showExportMessage(
+          result.warnings.isEmpty ? 'PDF 已成功导出' : 'PDF 已导出，部分内容已降级处理',
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(saveResult.message ?? 'PDF 导出失败，请稍后重试')),
-        );
+        _showExportMessage(saveResult.message ?? 'PDF 导出失败，请稍后重试');
       }
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('PDF 导出失败：$error')),
-      );
+      if (mounted) _showExportMessage('PDF 导出失败，请稍后重试');
+    } finally {
+      if (mounted) setState(() => _isExportingPdf = false);
     }
+  }
+
+  void _showExportProgress(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Text(message)),
+            ],
+          ),
+          duration: const Duration(minutes: 1),
+        ),
+      );
+  }
+
+  void _showExportMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   String? _sourceDirectoryOf(MarkdownFile file) {
@@ -281,6 +312,7 @@ class _HistoryPageState extends State<HistoryPage> {
               leading: const Icon(Icons.picture_as_pdf),
               title: const Text('导出为 PDF'),
               onTap: () {
+                if (_isExportingPdf) return;
                 Navigator.of(context).pop();
                 _exportPdf(file);
               },
