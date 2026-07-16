@@ -151,7 +151,7 @@ class PdfExportService {
                     padding: const pw.EdgeInsets.only(bottom: 12),
                     child: pw.Text(
                       options.title!,
-                      style: pw.TextStyle(
+                      style: const pw.TextStyle(
                         fontSize: 14,
                         fontWeight: pw.FontWeight.bold,
                       ),
@@ -322,10 +322,11 @@ class PdfExportService {
     return pw.Container(
       margin: const pw.EdgeInsets.only(bottom: 8),
       padding: const pw.EdgeInsets.all(10),
-      decoration: pw.BoxDecoration(
+      decoration: const pw.BoxDecoration(
         color: PdfColors.grey200,
-        border:
-            pw.Border(left: pw.BorderSide(color: PdfColors.grey600, width: 3)),
+        border: pw.Border(
+          left: pw.BorderSide(color: PdfColors.grey600, width: 3),
+        ),
       ),
       child: pw.Text(node.textContent,
           style: const pw.TextStyle(fontSize: 11, height: 1.5)),
@@ -354,8 +355,11 @@ class PdfExportService {
                   child: pw.Text(ordered ? '${index++}.' : '•'),
                 ),
                 pw.Expanded(
-                    child: pw.Text(child.textContent,
-                        style: const pw.TextStyle(fontSize: 11, height: 1.4))),
+                  child: pw.Text(
+                    child.textContent,
+                    style: const pw.TextStyle(fontSize: 11, height: 1.4),
+                  ),
+                ),
               ],
             ),
           ),

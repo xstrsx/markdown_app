@@ -27,7 +27,7 @@ void main() {
 
   test('rejects oversized local image data through the resolver limit',
       () async {
-    final resolver = DefaultPdfImageResolver(maxBytes: 4);
+    const resolver = DefaultPdfImageResolver(maxBytes: 4);
     final result = await resolver.resolve(
       'test-image.bin',
       sourceDirectory: 'test',
