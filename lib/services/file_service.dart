@@ -67,6 +67,19 @@ class FileSaveResult {
 class FileService {
   static const _channel = MethodChannel('com.xstrsx.mdeditor/file');
 
+  static String exportFileName({
+    required String defaultName,
+    required String mimeType,
+  }) {
+    final extension = mimeType ==
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        ? 'docx'
+        : 'pdf';
+    return defaultName.toLowerCase().endsWith('.$extension')
+        ? defaultName
+        : '$defaultName.$extension';
+  }
+
   // ─── Permission ───────────────────────────────────────────────────────
 
   static Future<bool> ensureStoragePermission() async {
@@ -179,8 +192,12 @@ class FileService {
     required Uint8List bytes,
     required String mimeType,
   }) async {
-    final fileName =
-        defaultName.endsWith('.pdf') ? defaultName : '$defaultName.pdf';
+    final fileName = exportFileName(
+      defaultName: defaultName,
+      mimeType: mimeType,
+    );
+    final extension = fileName.split('.').last.toLowerCase();
+    final isDocx = extension == 'docx';
 
     if (Platform.isAndroid) {
       try {
@@ -213,10 +230,10 @@ class FileService {
 
     try {
       final outputPath = await FilePicker.platform.saveFile(
-        dialogTitle: '导出 PDF',
+        dialogTitle: isDocx ? '导出 DOCX' : '导出 PDF',
         fileName: fileName,
         type: FileType.custom,
-        allowedExtensions: ['pdf'],
+        allowedExtensions: [extension],
         bytes: bytes,
       );
       if (outputPath == null) {
@@ -230,9 +247,9 @@ class FileService {
       await outputFile.writeAsBytes(bytes, flush: true);
       if (!await outputFile.exists() ||
           await outputFile.length() != bytes.length) {
-        return const FileSaveResult(
+        return FileSaveResult(
           status: FileSaveStatus.failed,
-          message: 'PDF 文件未能写入所选位置',
+          message: '$extension 文件未能写入所选位置',
         );
       }
       return FileSaveResult(status: FileSaveStatus.saved, path: outputPath);

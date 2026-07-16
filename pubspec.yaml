@@ -13,7 +13,7 @@ dependencies:
   
   # Markdown rendering
   flutter_markdown: ^0.6.18+3
-  markdown: ^7.1.1
+  markdown: ^7.3.1
   
   # Code highlighting
   flutter_highlighter: ^0.1.1
@@ -30,6 +30,10 @@ dependencies:
   # PDF export
   pdf: ^3.11.3
   http: ^1.2.2
+
+  # DOCX export
+  docx_creator: ^1.2.7
+  flutter_inappwebview: ^6.1.0
 
   # File operations
   file_picker: ^8.1.6
@@ -67,3 +71,4 @@ flutter:
   assets:
     - assets/
     - assets/fonts/
+    - assets/render_assets/

@@ -14,6 +14,17 @@ MarkdownFile _file(String path, {String? contentPath}) => MarkdownFile(
     );
 
 void main() {
+  test('uses the DOCX extension when saving DOCX bytes', () {
+    expect(
+      FileService.exportFileName(
+        defaultName: 'notes',
+        mimeType:
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      ),
+      'notes.docx',
+    );
+  });
+
   test('deletes an existing direct file but preserves cache', () async {
     final dir = await Directory.systemTemp.createTemp('md_delete_');
     addTearDown(() => dir.delete(recursive: true));

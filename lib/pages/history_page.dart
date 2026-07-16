@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import '../models/markdown_file.dart';
 import '../services/file_service.dart';
 import '../services/history_service.dart';
 import '../services/pdf_export_service.dart';
+import '../export/export_docx.dart';
+import '../export/headless_webview_render.dart';
 import 'editor_page.dart';
 
 class HistoryPage extends StatefulWidget {
@@ -17,6 +20,7 @@ class _HistoryPageState extends State<HistoryPage> {
   List<MarkdownFile> _history = [];
   bool _isLoading = true;
   bool _isExportingPdf = false;
+  bool _isExportingDocx = false;
 
   @override
   void initState() {
@@ -91,6 +95,59 @@ class _HistoryPageState extends State<HistoryPage> {
       if (mounted) _showExportMessage('PDF 导出失败，请稍后重试');
     } finally {
       if (mounted) setState(() => _isExportingPdf = false);
+    }
+  }
+
+  Future<void> _exportDocx(MarkdownFile file) async {
+    if (_isExportingDocx) return;
+    setState(() => _isExportingDocx = true);
+    _showExportProgress('正在准备 DOCX 导出...');
+
+    try {
+      final content = await _loadMarkdownContent(file);
+      if (!mounted) return;
+      if (content == null || content.isEmpty) {
+        _showExportMessage('无法读取文件内容，无法导出 DOCX');
+        return;
+      }
+
+      _showExportProgress('正在生成 DOCX，请稍候...');
+      final title = file.name.replaceAll(
+        RegExp(r'\.md$|\.markdown$', caseSensitive: false),
+        '',
+      );
+      final result = await MarkdownDocxExporter.generate(
+        markdown: content,
+        title: title,
+        renderer: HeadlessWebViewRenderer(platform: defaultTargetPlatform),
+      );
+      if (!mounted) return;
+
+      _showExportProgress('DOCX 已生成，正在打开保存位置...');
+      final saveResult = await FileService.saveBytesAs(
+        defaultName: title,
+        bytes: result.bytes,
+        mimeType:
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      );
+      if (!mounted) return;
+      if (saveResult.status == FileSaveStatus.cancelled) return;
+      if (saveResult.isSuccess) {
+        final runtimeWarning = result.warnings
+            .map((warning) => warning.message)
+            .where((message) => message == windowsWebView2Warning)
+            .firstOrNull;
+        _showExportMessage(runtimeWarning ??
+            (result.warnings.isEmpty
+                ? 'DOCX 已成功导出'
+                : 'DOCX 已导出，部分内容已降级处理'));
+      } else {
+        _showExportMessage(saveResult.message ?? 'DOCX 导出失败，请稍后重试');
+      }
+    } catch (error) {
+      if (mounted) _showExportMessage('DOCX 导出失败，请稍后重试');
+    } finally {
+      if (mounted) setState(() => _isExportingDocx = false);
     }
   }
 
@@ -315,6 +372,15 @@ class _HistoryPageState extends State<HistoryPage> {
                 if (_isExportingPdf) return;
                 Navigator.of(context).pop();
                 _exportPdf(file);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.description_outlined),
+              title: const Text('导出为 DOCX'),
+              onTap: () {
+                if (_isExportingDocx) return;
+                Navigator.of(context).pop();
+                _exportDocx(file);
               },
             ),
             ListTile(
