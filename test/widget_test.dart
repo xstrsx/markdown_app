@@ -8,8 +8,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('App renders main screen with title and action buttons',
-      (WidgetTester tester) async {
+  testWidgets('App renders main screen with title and action buttons', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
     await tester.pump();
 
@@ -27,8 +26,7 @@ void main() {
     expect(find.text('历史'), findsWidgets);
   });
 
-  testWidgets('Navigation switches between Home and History pages',
-      (WidgetTester tester) async {
+  testWidgets('Navigation switches between Home and History pages', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
     await tester.pump();
 
@@ -52,8 +50,7 @@ void main() {
     expect(find.text('MD 编辑器'), findsOneWidget);
   });
 
-  testWidgets('Create new file dialog opens and has correct fields',
-      (WidgetTester tester) async {
+  testWidgets('Create new file dialog opens and has correct fields', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
     await tester.pump();
 
