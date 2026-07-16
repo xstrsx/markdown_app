@@ -67,7 +67,8 @@ class DefaultPdfImageResolver implements PdfImageResolver {
       if (uri.scheme == 'file') {
         final file = File(uri.toFilePath());
         if (await file.exists()) return _readLocalFile(file);
-      } else if (uri.scheme == 'http' || uri.scheme == 'https') {
+      } else if ((uri.scheme == 'http' || uri.scheme == 'https') &&
+          uri.host.isNotEmpty) {
         final client = HttpClient();
         try {
           final request = await client.getUrl(uri);
@@ -81,6 +82,14 @@ class DefaultPdfImageResolver implements PdfImageResolver {
             if (bytes.length > maxBytes) return null;
             return Uint8List.fromList(bytes);
           }
+        } on SocketException {
+          return null;
+        } on HandshakeException {
+          return null;
+        } on TlsException {
+          return null;
+        } on FormatException {
+          return null;
         } finally {
           client.close(force: true);
         }

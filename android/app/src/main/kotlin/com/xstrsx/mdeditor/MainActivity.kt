@@ -44,7 +44,7 @@ class MainActivity : FlutterActivity() {
                         val fileName = call.argument<String>("fileName") ?: "未命名.md"
                         startSaveFileIntent(fileName)
                     }
-                    "saveBytesAs" -> {
+            "saveBytesAs" -> {
                         pendingResult = result
                         saveBytes = call.argument<ByteArray>("bytes")
                         saveMimeType = call.argument<String>("mimeType") ?: "application/octet-stream"
@@ -207,7 +207,7 @@ class MainActivity : FlutterActivity() {
     private fun handleSaveBytesResult(uri: Uri) {
         try {
             val bytes = saveBytes ?: ByteArray(0)
-            contentResolver.openOutputStream(uri, "wt")?.use { output ->
+            contentResolver.openOutputStream(uri, "w")?.use { output ->
                 output.write(bytes)
                 output.flush()
             } ?: run {

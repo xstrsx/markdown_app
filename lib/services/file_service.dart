@@ -222,6 +222,19 @@ class FileService {
       if (outputPath == null) {
         return const FileSaveResult(status: FileSaveStatus.cancelled);
       }
+
+      // Some Windows file_picker versions return the selected path but do not
+      // persist the supplied bytes. Write the final bytes explicitly and
+      // verify the destination so success never means "dialog closed" only.
+      final outputFile = File(outputPath);
+      await outputFile.writeAsBytes(bytes, flush: true);
+      if (!await outputFile.exists() ||
+          await outputFile.length() != bytes.length) {
+        return const FileSaveResult(
+          status: FileSaveStatus.failed,
+          message: 'PDF 文件未能写入所选位置',
+        );
+      }
       return FileSaveResult(status: FileSaveStatus.saved, path: outputPath);
     } catch (e) {
       return FileSaveResult(
