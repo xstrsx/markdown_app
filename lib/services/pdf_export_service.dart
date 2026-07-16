@@ -154,6 +154,7 @@ class PdfExportService {
         warnings,
         imageResolver,
         sourceDirectory,
+        regularFont,
       );
 
       document.addPage(
@@ -166,18 +167,7 @@ class PdfExportService {
             italic: regularFont,
             boldItalic: boldFont,
           ),
-          header: options.title == null
-              ? null
-              : (context) => pw.Padding(
-                    padding: const pw.EdgeInsets.only(bottom: 12),
-                    child: pw.Text(
-                      options.title!,
-                      style: const pw.TextStyle(
-                        fontSize: 14,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                  ),
+          header: null,
           footer: options.includePageNumbers
               ? (context) => pw.Align(
                     alignment: pw.Alignment.centerRight,
@@ -223,6 +213,7 @@ class PdfExportService {
     List<PdfExportWarning> warnings,
     PdfImageResolver imageResolver,
     String? sourceDirectory,
+    pw.Font regularFont,
   ) async {
     final widgets = <pw.Widget>[];
     for (final node in nodes) {
@@ -256,7 +247,7 @@ class PdfExportService {
             widgets.add(pw.Divider());
             break;
           case 'pre':
-            widgets.add(_codeBlock(node, warnings));
+            widgets.add(_codeBlock(node, warnings, regularFont));
             break;
           case 'table':
             widgets.add(_table(node));
@@ -395,7 +386,10 @@ class PdfExportService {
   }
 
   static pw.Widget _codeBlock(
-      md.Element node, List<PdfExportWarning> warnings) {
+    md.Element node,
+    List<PdfExportWarning> warnings,
+    pw.Font regularFont,
+  ) {
     final text = node.textContent;
     final language = node.attributes['class']?.replaceFirst('language-', '');
     if (language == 'mermaid') {
@@ -418,7 +412,7 @@ class PdfExportService {
       ),
       child: pw.Text(
         text,
-        style: pw.TextStyle(fontSize: 9, font: pw.Font.courier()),
+        style: pw.TextStyle(fontSize: 9, font: regularFont),
       ),
     );
   }
