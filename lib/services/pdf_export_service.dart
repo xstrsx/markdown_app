@@ -137,7 +137,10 @@ class PdfExportService {
 
       final fontData =
           await rootBundle.load('assets/fonts/NotoSansSC-Regular.ttf');
+      final emojiFontData = await rootBundle
+          .load('assets/fonts/NotoColorEmoji_WindowsCompatible.ttf');
       final regularFont = pw.Font.ttf(fontData);
+      final emojiFont = pw.Font.ttf(emojiFontData);
       final boldFont = regularFont;
 
       final parsed =
@@ -155,6 +158,7 @@ class PdfExportService {
         imageResolver,
         sourceDirectory,
         regularFont,
+        emojiFont,
       );
 
       document.addPage(
@@ -166,6 +170,7 @@ class PdfExportService {
             bold: boldFont,
             italic: regularFont,
             boldItalic: boldFont,
+            fontFallback: [emojiFont],
           ),
           header: null,
           footer: options.includePageNumbers
@@ -214,6 +219,7 @@ class PdfExportService {
     PdfImageResolver imageResolver,
     String? sourceDirectory,
     pw.Font regularFont,
+    pw.Font emojiFont,
   ) async {
     final widgets = <pw.Widget>[];
     for (final node in nodes) {
@@ -247,7 +253,7 @@ class PdfExportService {
             widgets.add(pw.Divider());
             break;
           case 'pre':
-            widgets.add(_codeBlock(node, warnings, regularFont));
+            widgets.add(_codeBlock(node, warnings, regularFont, emojiFont));
             break;
           case 'table':
             widgets.add(_table(node));
@@ -389,6 +395,7 @@ class PdfExportService {
     md.Element node,
     List<PdfExportWarning> warnings,
     pw.Font regularFont,
+    pw.Font emojiFont,
   ) {
     final text = node.textContent;
     final language = node.attributes['class']?.replaceFirst('language-', '');
@@ -412,7 +419,11 @@ class PdfExportService {
       ),
       child: pw.Text(
         text,
-        style: pw.TextStyle(fontSize: 9, font: regularFont),
+        style: pw.TextStyle(
+          fontSize: 9,
+          font: regularFont,
+          fontFallback: [emojiFont],
+        ),
       ),
     );
   }
