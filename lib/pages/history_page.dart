@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../models/markdown_file.dart';
 import '../services/file_service.dart';
 import '../services/history_service.dart';
+import '../services/pdf_export_service.dart';
 import 'editor_page.dart';
 
 class HistoryPage extends StatefulWidget {
@@ -43,6 +44,79 @@ class _HistoryPageState extends State<HistoryPage> {
           ),
         )
         .then((_) => _loadHistory());
+  }
+
+  Future<void> _exportPdf(MarkdownFile file) async {
+    final content = await _loadMarkdownContent(file);
+    if (!mounted) return;
+    if (content == null || content.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法读取文件内容，无法导出 PDF')),
+      );
+      return;
+    }
+
+    try {
+      final title = file.name
+          .replaceAll(RegExp(r'\.md$|\.markdown$', caseSensitive: false), '');
+      final result = await PdfExportService.generate(
+        markdown: content,
+        options: PdfExportOptions(title: title),
+        sourceDirectory: _sourceDirectoryOf(file),
+      );
+      final saveResult = await FileService.saveBytesAs(
+        defaultName: title,
+        bytes: result.bytes,
+        mimeType: 'application/pdf',
+      );
+      if (!mounted) return;
+      if (saveResult.status == FileSaveStatus.cancelled) return;
+      if (saveResult.isSuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result.warnings.isEmpty ? 'PDF 已导出' : 'PDF 已导出，部分内容已降级处理',
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(saveResult.message ?? 'PDF 导出失败，请稍后重试')),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PDF 导出失败：$error')),
+      );
+    }
+  }
+
+  String? _sourceDirectoryOf(MarkdownFile file) {
+    if (file.path.isNotEmpty && !file.path.startsWith('content://')) {
+      return file.path.contains('/') || file.path.contains('\\')
+          ? file.path.substring(0, file.path.lastIndexOf(RegExp(r'[/\\]')))
+          : null;
+    }
+    return null;
+  }
+
+  Future<String?> _loadMarkdownContent(MarkdownFile file) async {
+    if (file.contentPath != null && file.contentPath!.isNotEmpty) {
+      final cached = await FileService.openFile(file.contentPath!);
+      if (cached != null) return cached.content;
+    }
+
+    if (file.path.isNotEmpty && !file.path.startsWith('content://')) {
+      final direct = await FileService.openFile(file.path);
+      if (direct != null) return direct.content;
+    }
+
+    if (file.contentUri != null && file.contentUri!.isNotEmpty) {
+      return await FileService.readContentViaUri(file.contentUri!);
+    }
+
+    return null;
   }
 
   void _showFileDetails(MarkdownFile file) {
@@ -201,6 +275,14 @@ class _HistoryPageState extends State<HistoryPage> {
               onTap: () {
                 Navigator.of(context).pop();
                 FileService.shareFile(file.path);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.picture_as_pdf),
+              title: const Text('导出为 PDF'),
+              onTap: () {
+                Navigator.of(context).pop();
+                _exportPdf(file);
               },
             ),
             ListTile(

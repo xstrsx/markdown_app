@@ -26,7 +26,11 @@ dependencies:
   gpt_markdown: ^1.1.7
   flutter_mermaid: ^0.1.0
   # =============================================
-  
+
+  # PDF export
+  pdf: ^3.11.3
+  http: ^1.2.2
+
   # File operations
   file_picker: ^8.1.6
   path_provider: ^2.1.1

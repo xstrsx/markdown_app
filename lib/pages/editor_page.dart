@@ -1,9 +1,15 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:markdown/markdown.dart' as md;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+
 import '../models/markdown_file.dart';
 import '../services/file_service.dart';
 import '../services/history_service.dart';
+import '../services/pdf_export_service.dart';
 import '../widgets/editor_toolbar.dart';
 import '../widgets/markdown_preview.dart';
 
@@ -13,6 +19,7 @@ class EditorPage extends StatefulWidget {
   final String? initialDisplayPath;
   final String? initialContentUri;
   final String? initialName;
+  final bool exportPdfOnOpen;
 
   const EditorPage({
     super.key,
@@ -21,6 +28,7 @@ class EditorPage extends StatefulWidget {
     this.initialDisplayPath,
     this.initialContentUri,
     this.initialName,
+    this.exportPdfOnOpen = false,
   });
 
   @override
@@ -40,6 +48,7 @@ class _EditorPageState extends State<EditorPage>
   bool _isModified = false;
   Timer? _autoSaveTimer;
   bool _isSaving = false;
+  bool _isExportingPdf = false;
 
   @override
   void initState() {
@@ -53,28 +62,31 @@ class _EditorPageState extends State<EditorPage>
   }
 
   Future<void> _loadInitialFile() async {
-    // Case 1: file object passed (from recent history or open)
     if (widget.file != null) {
       final file = widget.file!;
       _currentFile = file;
       _contentUri = file.contentUri;
       _cachePath = file.contentPath;
 
-      // Load content — try sources in priority order
       var content = file.content;
       if (content.isEmpty) {
         content = await _loadContent(
-          file.contentPath,  // cached copy (best chance)
-          file.path,         // display path / real path
-          _contentUri,       // SAF URI
+          file.contentPath,
+          file.path,
+          _contentUri,
         );
       }
       _textController.text = content;
       _isModified = false;
+      if (mounted) setState(() {});
+      if (widget.exportPdfOnOpen) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _exportPdf();
+        });
+      }
       return;
     }
 
-    // Case 2: fresh pick — load from cache path, then persist cache
     if (widget.initialFilePath != null) {
       final cachePath = widget.initialFilePath!;
       final loaded = await FileService.openFile(cachePath);
@@ -84,7 +96,6 @@ class _EditorPageState extends State<EditorPage>
         final name = widget.initialName ?? loaded.name;
         final text = loaded.content;
 
-        // Persist content to permanent cache
         final id = contentUri ?? displayPath;
         final contentPath = await FileService.cacheContent(text, name, id);
 
@@ -102,17 +113,20 @@ class _EditorPageState extends State<EditorPage>
           _contentUri = contentUri;
           _cachePath = cachePath;
           _textController.text = text;
+          _isModified = false;
         });
-        _isModified = false;
         await HistoryService.addToHistory(updatedFile);
+        if (widget.exportPdfOnOpen && mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _exportPdf();
+          });
+        }
       }
     }
   }
 
-  /// Try to load content from (in order): local cache → real path → SAF URI.
-  Future<String> _loadContent(String? contentPath, String? filePath,
-      String? contentUri) async {
-    // 1) Local persistent cache (created at first open/save)
+  Future<String> _loadContent(
+      String? contentPath, String? filePath, String? contentUri) async {
     if (contentPath != null && contentPath.isNotEmpty) {
       try {
         final f = File(contentPath);
@@ -122,7 +136,6 @@ class _EditorPageState extends State<EditorPage>
       } catch (_) {}
     }
 
-    // 2) Direct file read (works on desktop or with MANAGE_EXTERNAL_STORAGE)
     if (filePath != null &&
         filePath.isNotEmpty &&
         !filePath.startsWith('content://')) {
@@ -134,7 +147,6 @@ class _EditorPageState extends State<EditorPage>
       } catch (_) {}
     }
 
-    // 3) SAF content URI via platform channel
     if (contentUri != null && contentUri.isNotEmpty) {
       final text = await FileService.readContentViaUri(contentUri);
       if (text != null) return text;
@@ -162,9 +174,6 @@ class _EditorPageState extends State<EditorPage>
     }
     setState(() => _isSaving = true);
 
-    // Write to the best available target:
-    // - contentUri (SAF write-back) → Android
-    // - direct file path → desktop / permission-granted Android
     final writePath = _getWritablePath();
     final success = await FileService.saveFile(
       writePath,
@@ -175,7 +184,6 @@ class _EditorPageState extends State<EditorPage>
     if (success) {
       final name = _currentFile!.name;
       final content = _textController.text;
-      // Refresh persistent cache
       final id = _contentUri ?? _currentFile!.path;
       final contentPath = await FileService.cacheContent(content, name, id);
       final updatedFile = _currentFile!.copyWith(
@@ -199,10 +207,9 @@ class _EditorPageState extends State<EditorPage>
         const SnackBar(content: Text('保存失败，请检查文件权限')),
       );
     }
-    setState(() => _isSaving = false);
+    if (mounted) setState(() => _isSaving = false);
   }
 
-  /// Choose the best path for writing: real FS path > cache path.
   String _getWritablePath() {
     if (_currentFile != null) {
       final p = _currentFile!.path;
@@ -221,9 +228,9 @@ class _EditorPageState extends State<EditorPage>
 
     if (result != null) {
       final content = _textController.text;
-      // Persist to cache
       final id = result.contentUri ?? result.displayPath;
-      final contentPath = await FileService.cacheContent(content, result.name, id);
+      final contentPath =
+          await FileService.cacheContent(content, result.name, id);
       final newFile = MarkdownFile(
         path: result.displayPath,
         contentUri: result.contentUri,
@@ -248,17 +255,70 @@ class _EditorPageState extends State<EditorPage>
     }
   }
 
+  Future<void> _exportPdf() async {
+    if (_isExportingPdf) return;
+    setState(() => _isExportingPdf = true);
+
+    try {
+      final source = _textController.text;
+      final title = (_currentFile?.name ?? '未命名')
+          .replaceAll(RegExp(r'\.md$|\.markdown$', caseSensitive: false), '');
+      final sourceDirectory = _currentFile != null &&
+              _currentFile!.path.isNotEmpty &&
+              !_currentFile!.path.startsWith('content://')
+          ? File(_currentFile!.path).parent.path
+          : null;
+
+      final result = await PdfExportService.generate(
+        markdown: source,
+        options: PdfExportOptions(title: title),
+        sourceDirectory: sourceDirectory,
+      );
+
+      final saveResult = await FileService.saveBytesAs(
+        defaultName: title,
+        bytes: result.bytes,
+        mimeType: 'application/pdf',
+      );
+
+      if (!mounted) return;
+      if (saveResult.status == FileSaveStatus.cancelled) {
+        return;
+      }
+      if (saveResult.isSuccess) {
+        final warningText =
+            result.warnings.isEmpty ? 'PDF 已导出' : 'PDF 已导出，部分内容已降级处理';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(warningText)),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(saveResult.message ?? 'PDF 导出失败，请稍后重试'),
+          ),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PDF 导出失败：$error')),
+      );
+    } finally {
+      if (mounted) setState(() => _isExportingPdf = false);
+    }
+  }
+
   void _insertAtCursor(String before, String middle, String after) {
     final text = _textController.text;
     final sel = _textController.selection;
-    final start = (sel.start >= 0 && sel.start <= text.length)
-        ? sel.start
-        : text.length;
+    final start =
+        (sel.start >= 0 && sel.start <= text.length) ? sel.start : text.length;
     final end = (sel.end >= 0 && sel.end <= text.length && sel.end >= start)
         ? sel.end
         : start;
     final selected = text.substring(start, end);
-    final insertion = before + (selected.isNotEmpty ? selected : middle) + after;
+    final insertion =
+        before + (selected.isNotEmpty ? selected : middle) + after;
     final newText = text.replaceRange(start, end, insertion);
     _textController.value = TextEditingValue(
       text: newText,
@@ -363,8 +423,6 @@ class _EditorPageState extends State<EditorPage>
     super.dispose();
   }
 
-  // ─── Build ────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width > 600;
@@ -379,25 +437,44 @@ class _EditorPageState extends State<EditorPage>
               const Padding(
                 padding: EdgeInsets.all(16),
                 child: SizedBox(
-                  width: 20, height: 20,
+                  width: 20,
+                  height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
+            if (_isExportingPdf)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              )
+            else
+              IconButton(
+                icon: const Icon(Icons.picture_as_pdf),
+                tooltip: '导出 PDF',
+                onPressed: _exportPdf,
+              ),
             if (_isModified && !_isSaving)
               IconButton(
-                icon: const Icon(Icons.save), tooltip: '保存',
+                icon: const Icon(Icons.save),
+                tooltip: '保存',
                 onPressed: _saveFile,
               ),
             IconButton(
-              icon: const Icon(Icons.save_as), tooltip: '另存为',
+              icon: const Icon(Icons.save_as),
+              tooltip: '另存为',
               onPressed: _saveAs,
             ),
             IconButton(
-              icon: const Icon(Icons.share), tooltip: '分享',
+              icon: const Icon(Icons.share),
+              tooltip: '分享',
               onPressed: () {
                 if (_currentFile != null) {
                   FileService.shareContent(
-                    _textController.text, _currentFile!.name);
+                      _textController.text, _currentFile!.name);
                 }
               },
             ),
@@ -480,7 +557,9 @@ class _EditorPageState extends State<EditorPage>
         expands: true,
         textAlignVertical: TextAlignVertical.top,
         style: Theme.of(context)
-            .textTheme.bodyLarge?.copyWith(fontFamily: 'monospace', height: 1.5),
+            .textTheme
+            .bodyLarge
+            ?.copyWith(fontFamily: 'monospace', height: 1.5),
         decoration: const InputDecoration(
           border: InputBorder.none,
           hintText: '开始编写 Markdown...',

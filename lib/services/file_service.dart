@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -37,6 +39,30 @@ class FileDeletionResult {
   const FileDeletionResult(this.status, {this.message});
 
   bool get isSuccess => status == FileDeletionStatus.success;
+}
+
+enum FileSaveStatus {
+  saved,
+  cancelled,
+  permissionDenied,
+  unsupported,
+  failed,
+}
+
+class FileSaveResult {
+  final FileSaveStatus status;
+  final String? path;
+  final String? contentUri;
+  final String? message;
+
+  const FileSaveResult({
+    required this.status,
+    this.path,
+    this.contentUri,
+    this.message,
+  });
+
+  bool get isSuccess => status == FileSaveStatus.saved;
 }
 
 class FileService {
@@ -146,6 +172,61 @@ class FileService {
       return true;
     } catch (e) {
       return false;
+    }
+  }
+
+  static Future<FileSaveResult> saveBytesAs({
+    required String defaultName,
+    required Uint8List bytes,
+    required String mimeType,
+  }) async {
+    final fileName =
+        defaultName.endsWith('.pdf') ? defaultName : '$defaultName.pdf';
+
+    if (Platform.isAndroid) {
+      try {
+        final result = await _channel.invokeMethod<Map>('saveBytesAs', {
+          'fileName': fileName,
+          'mimeType': mimeType,
+          'bytes': bytes,
+        });
+        if (result == null) {
+          return const FileSaveResult(status: FileSaveStatus.cancelled);
+        }
+        final status = result['status'] as String?;
+        return FileSaveResult(
+          status: switch (status) {
+            'saved' => FileSaveStatus.saved,
+            'cancelled' => FileSaveStatus.cancelled,
+            'permissionDenied' => FileSaveStatus.permissionDenied,
+            'unsupported' => FileSaveStatus.unsupported,
+            _ => FileSaveStatus.failed,
+          },
+          path: result['path'] as String?,
+          contentUri: result['contentUri'] as String?,
+          message: result['message'] as String?,
+        );
+      } catch (e) {
+        return FileSaveResult(
+            status: FileSaveStatus.failed, message: e.toString());
+      }
+    }
+
+    try {
+      final outputPath = await FilePicker.platform.saveFile(
+        dialogTitle: '导出 PDF',
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+        bytes: bytes,
+      );
+      if (outputPath == null) {
+        return const FileSaveResult(status: FileSaveStatus.cancelled);
+      }
+      return FileSaveResult(status: FileSaveStatus.saved, path: outputPath);
+    } catch (e) {
+      return FileSaveResult(
+          status: FileSaveStatus.failed, message: e.toString());
     }
   }
 

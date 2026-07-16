@@ -20,10 +20,13 @@ class MainActivity : FlutterActivity() {
         private const val CHANNEL = "com.xstrsx.mdeditor/file"
         private const val PICK_FILE_CODE = 1001
         private const val SAVE_FILE_CODE = 1002
+        private const val SAVE_BYTES_CODE = 1003
     }
 
     private var pendingResult: MethodChannel.Result? = null
     private var saveContent: String? = null
+    private var saveBytes: ByteArray? = null
+    private var saveMimeType: String? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -40,6 +43,13 @@ class MainActivity : FlutterActivity() {
                         saveContent = call.argument<String>("content")
                         val fileName = call.argument<String>("fileName") ?: "未命名.md"
                         startSaveFileIntent(fileName)
+                    }
+                    "saveBytesAs" -> {
+                        pendingResult = result
+                        saveBytes = call.argument<ByteArray>("bytes")
+                        saveMimeType = call.argument<String>("mimeType") ?: "application/octet-stream"
+                        val fileName = call.argument<String>("fileName") ?: "未命名.pdf"
+                        startSaveBytesIntent(fileName)
                     }
                     "readFile" -> {
                         val uriString = call.argument<String>("uri")
@@ -83,8 +93,6 @@ class MainActivity : FlutterActivity() {
             }
     }
 
-    // ─── Pick File ─────────────────────────────────────────────────────
-
     private fun startPickFileIntent(mimeTypes: List<String>?) {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
@@ -99,19 +107,26 @@ class MainActivity : FlutterActivity() {
         catch (e: Exception) { pendingResult?.error("ERROR", e.message, null); pendingResult = null }
     }
 
-    // ─── Save File As ──────────────────────────────────────────────────
-
     private fun startSaveFileIntent(fileName: String) {
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             putExtra(Intent.EXTRA_TITLE, fileName)
-            // Try multiple MIME types: markdown → plain → any
             type = "text/*"
         }
         if (intent.resolveActivity(packageManager) == null) {
             intent.type = "*/*"
         }
         try { startActivityForResult(intent, SAVE_FILE_CODE) }
+        catch (e: Exception) { pendingResult?.error("ERROR", e.message, null); pendingResult = null }
+    }
+
+    private fun startSaveBytesIntent(fileName: String) {
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            putExtra(Intent.EXTRA_TITLE, fileName)
+            type = saveMimeType ?: "application/octet-stream"
+        }
+        try { startActivityForResult(intent, SAVE_BYTES_CODE) }
         catch (e: Exception) { pendingResult?.error("ERROR", e.message, null); pendingResult = null }
     }
 
@@ -126,12 +141,15 @@ class MainActivity : FlutterActivity() {
                 if (resultCode == RESULT_OK && data?.data != null) handleSaveResult(data!!.data!!)
                 else { pendingResult?.success(null); pendingResult = null; saveContent = null }
             }
+            SAVE_BYTES_CODE -> {
+                if (resultCode == RESULT_OK && data?.data != null) handleSaveBytesResult(data!!.data!!)
+                else { pendingResult?.success(deleteResult("cancelled", "用户取消导出")); pendingResult = null; saveBytes = null; saveMimeType = null }
+            }
         }
     }
 
     private fun handlePickResult(uri: Uri) {
         try {
-            // Take persistent permission for writing back later
             try {
                 contentResolver.takePersistableUriPermission(
                     uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or
@@ -140,14 +158,12 @@ class MainActivity : FlutterActivity() {
 
             val fileName = getFileName(uri) ?: "unknown.md"
 
-            // Cache file locally for reading
             val cacheDir = File(cacheDir, "file_picker"); cacheDir.mkdirs()
             val cacheFile = File(cacheDir, "${System.currentTimeMillis()}_$fileName")
             contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(cacheFile).use { output -> input.copyTo(output) }
             }
 
-            // Try resolving real path for display / history deduplication
             val realPath = resolveRealPath(uri)
             val displayPath = realPath ?: uri.toString()
 
@@ -172,7 +188,6 @@ class MainActivity : FlutterActivity() {
             val fileName = getFileName(uri) ?: "未命名.md"
             val realPath = resolveRealPath(uri) ?: uri.toString()
 
-            // Also cache the saved content locally for reading
             val cacheDir = File(cacheDir, "file_picker"); cacheDir.mkdirs()
             val cacheFile = File(cacheDir, "${System.currentTimeMillis()}_$fileName")
             cacheFile.writeText(content)
@@ -189,7 +204,32 @@ class MainActivity : FlutterActivity() {
         pendingResult = null; saveContent = null
     }
 
-    // ─── Write to URI ──────────────────────────────────────────────────
+    private fun handleSaveBytesResult(uri: Uri) {
+        try {
+            val bytes = saveBytes ?: ByteArray(0)
+            contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                output.write(bytes)
+                output.flush()
+            } ?: run {
+                pendingResult?.success(deleteResult("failed", "无法写入 PDF 文件"))
+                pendingResult = null
+                saveBytes = null
+                saveMimeType = null
+                return
+            }
+            val fileName = getFileName(uri) ?: "未命名.pdf"
+            val resultMap = mapOf(
+                "status" to "saved",
+                "path" to (resolveRealPath(uri) ?: uri.toString()),
+                "contentUri" to uri.toString(),
+                "name" to fileName
+            )
+            pendingResult?.success(resultMap)
+        } catch (e: Exception) {
+            pendingResult?.success(deleteResult("failed", e.message ?: "PDF 导出失败"))
+        }
+        pendingResult = null; saveBytes = null; saveMimeType = null
+    }
 
     private fun readFileFromUri(uri: Uri): String? {
         return try {
@@ -204,8 +244,6 @@ class MainActivity : FlutterActivity() {
             output.write(content.toByteArray(Charsets.UTF_8)); output.flush()
         }
     }
-
-    // ─── Delete document ─────────────────────────────────────────────────
 
     private fun deleteDocument(uri: Uri): Map<String, String> {
         if (uri.scheme != "content") {
@@ -234,12 +272,8 @@ class MainActivity : FlutterActivity() {
     private fun deleteResult(status: String, message: String): Map<String, String> =
         mapOf("status" to status, "message" to message)
 
-    // ─── Open file location ────────────────────────────────────────────
-
     private fun openLocation(path: String, contentUri: String?) {
         try {
-            // SAF URI is the authoritative original-file identity. The cache path
-            // passed in [path] must never be used for locating the original.
             if (!contentUri.isNullOrBlank()) {
                 val uri = Uri.parse(contentUri)
                 val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -260,8 +294,6 @@ class MainActivity : FlutterActivity() {
             }
             val parent = if (file.isDirectory) file else file.parentFile ?: return
 
-            // If parent is app-internal (cache/files), we can't expose it →
-            // copy path and show toast
             if (parent.absolutePath.startsWith(filesDir.absolutePath) ||
                 parent.absolutePath.startsWith(cacheDir.absolutePath)) {
                 copyPathToClipboard(path)
@@ -269,7 +301,6 @@ class MainActivity : FlutterActivity() {
                 return
             }
 
-            // For accessible directories, try DocumentsUI
             try {
                 val parentUri = Uri.parse(parent.absolutePath)
                 val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -281,7 +312,6 @@ class MainActivity : FlutterActivity() {
                 }
             } catch (_: Exception) {}
 
-            // Fallback
             copyPathToClipboard(path)
             showToast("文件路径已复制到剪贴板")
         } catch (e: Exception) {
@@ -289,8 +319,6 @@ class MainActivity : FlutterActivity() {
             showToast("文件路径已复制到剪贴板")
         }
     }
-
-    // ─── Helpers ───────────────────────────────────────────────────────
 
     private fun getFileName(uri: Uri): String? {
         try {
