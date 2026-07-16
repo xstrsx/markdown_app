@@ -439,21 +439,6 @@ class _EditorPageState extends State<EditorPage>
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
-            if (_isExportingPdf)
-              const Padding(
-                padding: EdgeInsets.all(16),
-                child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              )
-            else
-              IconButton(
-                icon: const Icon(Icons.picture_as_pdf),
-                tooltip: '导出 PDF',
-                onPressed: _exportPdf,
-              ),
             if (_isModified && !_isSaving)
               IconButton(
                 icon: const Icon(Icons.save),

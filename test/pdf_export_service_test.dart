@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:md_editor/services/pdf_export_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   test('reports a warning when Mermaid code is exported', () async {
     final result = await PdfExportService.generate(
       markdown: '```mermaid\ngraph TD\n  A --> B\n```',

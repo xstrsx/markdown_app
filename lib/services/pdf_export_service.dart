@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:markdown/markdown.dart' as md;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -134,6 +135,11 @@ class PdfExportService {
         author: options.author,
       );
 
+      final fontData =
+          await rootBundle.load('assets/fonts/NotoSansSC-Regular.ttf');
+      final regularFont = pw.Font.ttf(fontData);
+      final boldFont = regularFont;
+
       final parsed =
           md.Document(extensionSet: md.ExtensionSet.gitHubWeb).parse(markdown);
       final warnings = <PdfExportWarning>[];
@@ -154,6 +160,12 @@ class PdfExportService {
         pw.MultiPage(
           pageFormat: options.pageFormat,
           margin: options.pageMargins,
+          theme: pw.ThemeData.withFont(
+            base: regularFont,
+            bold: boldFont,
+            italic: regularFont,
+            boldItalic: boldFont,
+          ),
           header: options.title == null
               ? null
               : (context) => pw.Padding(
