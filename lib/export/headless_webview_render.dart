@@ -115,9 +115,11 @@ class HeadlessWebViewRenderer implements SvgRenderer {
 class _InAppWebViewSvgBridge implements HeadlessSvgBridge {
   late final WebViewEnvironment? _webViewEnvironment;
   late final HeadlessInAppWebView _webView;
+  final Map<int, Completer<String?>> _pendingResults = {};
   final Completer<InAppWebViewController> _controllerCompleter =
       Completer<InAppWebViewController>();
   final Completer<void> _loadCompleter = Completer<void>();
+  var _nextRequestId = 0;
 
   _InAppWebViewSvgBridge({WebViewEnvironment? webViewEnvironment}) {
     _webViewEnvironment = webViewEnvironment;
@@ -126,6 +128,20 @@ class _InAppWebViewSvgBridge implements HeadlessSvgBridge {
       initialFile: 'assets/render_assets/render.html',
       onWebViewCreated: (controller) {
         // The page remains offline; all rendering libraries are local assets.
+        controller.addJavaScriptHandler(
+          handlerName: 'svgReady',
+          callback: (arguments) {
+            _completeResult(arguments, error: false);
+            return null;
+          },
+        );
+        controller.addJavaScriptHandler(
+          handlerName: 'svgError',
+          callback: (arguments) {
+            _completeResult(arguments, error: true);
+            return null;
+          },
+        );
         _controllerCompleter.complete(controller);
       },
       onLoadStop: (controller, url) {
@@ -144,10 +160,31 @@ class _InAppWebViewSvgBridge implements HeadlessSvgBridge {
     await _webView.run();
     final controller = await _controllerCompleter.future;
     await _loadCompleter.future;
-    final result = await controller.evaluateJavascript(
-      source: 'window.renderSvg(${jsonEncode(type)}, ${jsonEncode(content)})',
-    );
-    return result is String ? result : result?.toString();
+    final requestId = ++_nextRequestId;
+    final result = Completer<String?>();
+    _pendingResults[requestId] = result;
+    try {
+      await controller.evaluateJavascript(
+        source:
+            'window.flutterRenderSvg(${jsonEncode(type)}, ${jsonEncode(content)}, $requestId)',
+      );
+      return await result.future.timeout(const Duration(seconds: 30));
+    } finally {
+      _pendingResults.remove(requestId);
+    }
+  }
+
+  void _completeResult(List<dynamic> arguments, {required bool error}) {
+    if (arguments.isEmpty) return;
+    final requestId = (arguments[0] as num?)?.toInt();
+    final completer = requestId == null ? null : _pendingResults[requestId];
+    if (completer == null || completer.isCompleted) return;
+    if (error) {
+      completer.completeError(StateError(
+          arguments.length > 1 ? arguments[1].toString() : 'SVG 渲染失败'));
+    } else {
+      completer.complete(arguments.length > 1 ? arguments[1].toString() : null);
+    }
   }
 
   @override

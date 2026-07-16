@@ -27,6 +27,17 @@
       }
       return null;
     });
+
+    // Dart triggers this function and receives the async result through the
+    // plugin bridge instead of relying on WebView Promise serialization.
+    window.flutterRenderSvg = async (type, code, requestId) => {
+      try {
+        const svg = await window.renderSvg(type, code);
+        await window.flutter_inappwebview.callHandler("svgReady", requestId, svg || "");
+      } catch (error) {
+        await window.flutter_inappwebview.callHandler("svgError", requestId, String(error));
+      }
+    };
   </script>
 </body>
 </html>
