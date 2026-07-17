@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import '../models/markdown_file.dart';
 import '../services/file_service.dart';
 import '../services/history_service.dart';
 import '../services/pdf_export_service.dart';
 import '../export/export_docx.dart';
-import '../export/headless_webview_render.dart';
 import 'editor_page.dart';
 
 class HistoryPage extends StatefulWidget {
@@ -119,7 +117,6 @@ class _HistoryPageState extends State<HistoryPage> {
       final result = await MarkdownDocxExporter.generate(
         markdown: content,
         title: title,
-        renderer: HeadlessWebViewRenderer(platform: defaultTargetPlatform),
       );
       if (!mounted) return;
 
@@ -133,14 +130,8 @@ class _HistoryPageState extends State<HistoryPage> {
       if (!mounted) return;
       if (saveResult.status == FileSaveStatus.cancelled) return;
       if (saveResult.isSuccess) {
-        final runtimeWarning = result.warnings
-            .map((warning) => warning.message)
-            .where((message) => message == windowsWebView2Warning)
-            .firstOrNull;
-        _showExportMessage(runtimeWarning ??
-            (result.warnings.isEmpty
-                ? 'DOCX 已成功导出'
-                : 'DOCX 已导出，部分内容已降级处理'));
+        _showExportMessage(
+            result.warnings.isEmpty ? 'DOCX 已成功导出' : 'DOCX 已导出，部分内容已降级处理');
       } else {
         _showExportMessage(saveResult.message ?? 'DOCX 导出失败，请稍后重试');
       }

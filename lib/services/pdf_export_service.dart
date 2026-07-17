@@ -146,12 +146,6 @@ class PdfExportService {
       final parsed =
           md.Document(extensionSet: md.ExtensionSet.gitHubWeb).parse(markdown);
       final warnings = <PdfExportWarning>[];
-      await _collectFeatureWarnings(
-        markdown,
-        warnings,
-        imageResolver,
-        sourceDirectory,
-      );
       final contentWidgets = await _buildWidgets(
         parsed,
         warnings,
@@ -192,27 +186,6 @@ class PdfExportService {
     }
   }
 
-  static Future<void> _collectFeatureWarnings(
-    String markdown,
-    List<PdfExportWarning> warnings,
-    PdfImageResolver imageResolver,
-    String? sourceDirectory,
-  ) async {
-    if (RegExp(r'(^|\n)```\s*mermaid\b', caseSensitive: false)
-        .hasMatch(markdown)) {
-      warnings.add(const PdfExportWarning('Mermaid 图表已降级为源码'));
-    }
-    if (markdown.contains(r'$$') ||
-        RegExp(r'\$[^\n$]+\$').hasMatch(markdown) ||
-        markdown.contains(r'\\(') ||
-        markdown.contains(r'\\[')) {
-      warnings.add(const PdfExportWarning('LaTeX 公式已降级为文本'));
-    }
-    if (RegExp(r'!\[[^\]]*\]\([^)]*\)').hasMatch(markdown)) {
-      warnings.add(const PdfExportWarning('图片将尝试嵌入 PDF'));
-    }
-  }
-
   static Future<List<pw.Widget>> _buildWidgets(
     List<md.Node> nodes,
     List<PdfExportWarning> warnings,
@@ -231,7 +204,7 @@ class PdfExportService {
           case 'h4':
           case 'h5':
           case 'h6':
-            widgets.add(_heading(node));
+            widgets.add(_heading(node, regularFont, emojiFont));
             break;
           case 'p':
             widgets.add(await _paragraph(
@@ -239,24 +212,29 @@ class PdfExportService {
               warnings,
               imageResolver,
               sourceDirectory,
+              regularFont,
+              emojiFont,
             ));
             break;
           case 'blockquote':
-            widgets.add(
-                _blockquote(node, warnings, imageResolver, sourceDirectory));
+            widgets.add(_blockquote(node, regularFont, emojiFont));
             break;
           case 'ul':
           case 'ol':
-            widgets.add(_list(node, warnings, imageResolver, sourceDirectory));
+            widgets.add(_list(node, regularFont, emojiFont));
             break;
           case 'hr':
             widgets.add(pw.Divider());
             break;
           case 'pre':
-            widgets.add(_codeBlock(node, warnings, regularFont, emojiFont));
+            widgets.add(_codeBlock(
+              node,
+              regularFont,
+              emojiFont,
+            ));
             break;
           case 'table':
-            widgets.add(_table(node));
+            widgets.add(_table(node, regularFont, emojiFont));
             break;
           case 'img':
             widgets.add(await _image(
@@ -278,7 +256,11 @@ class PdfExportService {
     return widgets;
   }
 
-  static pw.Widget _heading(md.Element node) {
+  static pw.Widget _heading(
+    md.Element node,
+    pw.Font regularFont,
+    pw.Font emojiFont,
+  ) {
     final level = int.tryParse(node.tag.substring(1)) ?? 1;
     final size = switch (level) {
       1 => 20.0,
@@ -290,9 +272,16 @@ class PdfExportService {
     };
     return pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 8, top: 12),
-      child: pw.Text(
-        node.textContent,
-        style: pw.TextStyle(fontSize: size, fontWeight: pw.FontWeight.bold),
+      child: pw.RichText(
+        text: pw.TextSpan(
+          style: pw.TextStyle(
+            fontSize: size,
+            fontWeight: pw.FontWeight.bold,
+            font: regularFont,
+            fontFallback: [emojiFont],
+          ),
+          children: _inlineSpans(node.children ?? const <md.Node>[]),
+        ),
       ),
     );
   }
@@ -302,7 +291,13 @@ class PdfExportService {
     List<PdfExportWarning> warnings,
     PdfImageResolver imageResolver,
     String? sourceDirectory,
+    pw.Font regularFont,
+    pw.Font emojiFont,
   ) async {
+    final blockFormula = _blockLatex(node.textContent);
+    if (blockFormula != null) {
+      return _latexBlock(blockFormula, regularFont, emojiFont);
+    }
     final image = node.children
         ?.whereType<md.Element>()
         .where((child) => child.tag == 'img')
@@ -320,22 +315,31 @@ class PdfExportService {
           ),
           if (node.textContent.trim().isNotEmpty &&
               node.textContent.trim() != image.textContent.trim())
-            _textBlock(node.textContent),
+            _richTextBlock(
+                node.children ?? const <md.Node>[], regularFont, emojiFont),
         ],
       );
     }
     return pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 8),
-      child: pw.Text(node.textContent,
-          style: const pw.TextStyle(fontSize: 11, height: 1.5)),
+      child: pw.RichText(
+        text: pw.TextSpan(
+          style: pw.TextStyle(
+            fontSize: 11,
+            height: 1.5,
+            font: regularFont,
+            fontFallback: [emojiFont],
+          ),
+          children: _inlineSpans(node.children ?? const <md.Node>[]),
+        ),
+      ),
     );
   }
 
   static pw.Widget _blockquote(
     md.Element node,
-    List<PdfExportWarning> warnings,
-    PdfImageResolver imageResolver,
-    String? sourceDirectory,
+    pw.Font regularFont,
+    pw.Font emojiFont,
   ) {
     return pw.Container(
       margin: const pw.EdgeInsets.only(bottom: 8),
@@ -346,16 +350,24 @@ class PdfExportService {
           left: pw.BorderSide(color: PdfColors.grey600, width: 3),
         ),
       ),
-      child: pw.Text(node.textContent,
-          style: const pw.TextStyle(fontSize: 11, height: 1.5)),
+      child: pw.RichText(
+        text: pw.TextSpan(
+          style: pw.TextStyle(
+            fontSize: 11,
+            height: 1.5,
+            font: regularFont,
+            fontFallback: [emojiFont],
+          ),
+          children: _inlineSpans(node.children ?? const <md.Node>[]),
+        ),
+      ),
     );
   }
 
   static pw.Widget _list(
     md.Element node,
-    List<PdfExportWarning> warnings,
-    PdfImageResolver imageResolver,
-    String? sourceDirectory,
+    pw.Font regularFont,
+    pw.Font emojiFont,
   ) {
     final ordered = node.tag == 'ol';
     final items = <pw.Widget>[];
@@ -373,9 +385,18 @@ class PdfExportService {
                   child: pw.Text(ordered ? '${index++}.' : '•'),
                 ),
                 pw.Expanded(
-                  child: pw.Text(
-                    child.textContent,
-                    style: const pw.TextStyle(fontSize: 11, height: 1.4),
+                  child: pw.RichText(
+                    text: pw.TextSpan(
+                      style: pw.TextStyle(
+                        fontSize: 11,
+                        height: 1.4,
+                        font: regularFont,
+                        fontFallback: [emojiFont],
+                      ),
+                      children: _inlineSpans(
+                        child.children ?? const <md.Node>[],
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -393,21 +414,24 @@ class PdfExportService {
 
   static pw.Widget _codeBlock(
     md.Element node,
-    List<PdfExportWarning> warnings,
     pw.Font regularFont,
     pw.Font emojiFont,
   ) {
     final text = node.textContent;
-    final language = node.attributes['class']?.replaceFirst('language-', '');
-    if (language == 'mermaid') {
-      warnings.add(const PdfExportWarning('Mermaid 图表已降级为源码'));
-      return _warningBlock('Mermaid 图表（源码）\n$text');
+    final code = node.children?.whereType<md.Element>().firstOrNull;
+    final language = (code?.attributes['class'] ?? node.attributes['class'])
+        ?.replaceFirst('language-', '');
+    if (language?.toLowerCase() == 'mermaid') {
+      return _codeContainer('```mermaid\n$text\n```', regularFont, emojiFont);
     }
-    if (text.contains(r'\\(') ||
-        text.contains(r'\\[') ||
-        text.contains(r'$$')) {
-      warnings.add(const PdfExportWarning('LaTeX 公式已降级为文本'));
-    }
+    return _codeContainer(text, regularFont, emojiFont);
+  }
+
+  static pw.Widget _codeContainer(
+    String text,
+    pw.Font regularFont,
+    pw.Font emojiFont,
+  ) {
     return pw.Container(
       width: double.infinity,
       margin: const pw.EdgeInsets.only(bottom: 8),
@@ -471,7 +495,11 @@ class PdfExportService {
     );
   }
 
-  static pw.Widget _table(md.Element node) {
+  static pw.Widget _table(
+    md.Element node,
+    pw.Font regularFont,
+    pw.Font emojiFont,
+  ) {
     final rows = node.children
             ?.whereType<md.Element>()
             .expand((section) =>
@@ -491,8 +519,18 @@ class PdfExportService {
             for (final cell in cells)
               pw.Padding(
                 padding: const pw.EdgeInsets.all(6),
-                child: pw.Text(cell.textContent,
-                    style: const pw.TextStyle(fontSize: 10)),
+                child: pw.RichText(
+                  text: pw.TextSpan(
+                    style: pw.TextStyle(
+                      fontSize: 10,
+                      font: regularFont,
+                      fontFallback: [emojiFont],
+                    ),
+                    children: _inlineSpans(
+                      cell.children ?? const <md.Node>[],
+                    ),
+                  ),
+                ),
               ),
           ],
         ),
@@ -505,6 +543,151 @@ class PdfExportService {
           children: tableRows),
     );
   }
+
+  static pw.Widget _richTextBlock(
+    List<md.Node> nodes,
+    pw.Font regularFont,
+    pw.Font emojiFont,
+  ) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 8),
+      child: pw.RichText(
+        text: pw.TextSpan(
+          style: pw.TextStyle(
+            fontSize: 11,
+            height: 1.5,
+            font: regularFont,
+            fontFallback: [emojiFont],
+          ),
+          children: _inlineSpans(nodes),
+        ),
+      ),
+    );
+  }
+
+  static pw.Widget _latexBlock(
+    String formula,
+    pw.Font regularFont,
+    pw.Font emojiFont,
+  ) {
+    return pw.Container(
+      width: double.infinity,
+      margin: const pw.EdgeInsets.only(bottom: 8),
+      padding: const pw.EdgeInsets.symmetric(vertical: 8),
+      alignment: pw.Alignment.center,
+      child: pw.Text(
+        _standardBlockLatex(formula),
+        style: pw.TextStyle(
+          fontSize: 11,
+          font: regularFont,
+          fontFallback: [emojiFont],
+        ),
+      ),
+    );
+  }
+
+  static List<pw.InlineSpan> _inlineSpans(List<md.Node> nodes) {
+    final spans = <pw.InlineSpan>[];
+    for (final node in nodes) {
+      if (node is md.Text) {
+        spans.addAll(_formulaSpans(node.text));
+        continue;
+      }
+      if (node is! md.Element) continue;
+
+      final children = node.children == null
+          ? <pw.InlineSpan>[]
+          : _inlineSpans(node.children!);
+      switch (node.tag) {
+        case 'strong':
+        case 'b':
+          spans.add(pw.TextSpan(
+            style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            children: children,
+          ));
+          break;
+        case 'em':
+        case 'i':
+          spans.add(pw.TextSpan(
+            style: pw.TextStyle(fontStyle: pw.FontStyle.italic),
+            children: children,
+          ));
+          break;
+        case 'del':
+        case 's':
+        case 'strike':
+          spans.add(pw.TextSpan(
+            style: const pw.TextStyle(
+              decoration: pw.TextDecoration.lineThrough,
+            ),
+            children: children,
+          ));
+          break;
+        case 'code':
+          spans.add(pw.TextSpan(
+            style: const pw.TextStyle(
+              fontSize: 10,
+              background: pw.BoxDecoration(color: PdfColors.grey200),
+            ),
+            children: children,
+          ));
+          break;
+        case 'a':
+          spans.add(pw.TextSpan(
+            style: const pw.TextStyle(
+              color: PdfColors.blue,
+              decoration: pw.TextDecoration.underline,
+            ),
+            children: children,
+          ));
+          break;
+        case 'br':
+          spans.add(const pw.TextSpan(text: '\n'));
+          break;
+        case 'img':
+          spans.add(pw.TextSpan(text: node.attributes['alt'] ?? ''));
+          break;
+        default:
+          spans.add(pw.TextSpan(children: children));
+          break;
+      }
+    }
+    return spans;
+  }
+
+  static List<pw.InlineSpan> _formulaSpans(String text) {
+    final result = <pw.InlineSpan>[];
+    final pattern = RegExp(
+      r'(?<!\$)\$([^\$\n]+)\$(?!\$)|\\\(([^\n]*?)\\\)',
+    );
+    var cursor = 0;
+    for (final match in pattern.allMatches(text)) {
+      if (match.start > cursor) {
+        result.add(pw.TextSpan(text: text.substring(cursor, match.start)));
+      }
+      final formula = match.group(1) ?? match.group(2) ?? '';
+      result.add(pw.TextSpan(text: _standardInlineLatex(formula)));
+      cursor = match.end;
+    }
+    if (cursor < text.length) {
+      result.add(pw.TextSpan(text: text.substring(cursor)));
+    }
+    if (result.isEmpty) result.add(pw.TextSpan(text: text));
+    return result;
+  }
+
+  static String? _blockLatex(String text) {
+    final dollar =
+        RegExp(r'^\s*\$\$\s*\n?([\s\S]*?)\n?\s*\$\$\s*$').firstMatch(text);
+    if (dollar != null) return dollar.group(1)!.trim();
+    final bracket =
+        RegExp(r'^\s*\\\[\s*\n?([\s\S]*?)\n?\s*\\\]\s*$').firstMatch(text);
+    return bracket?.group(1)?.trim();
+  }
+
+  static String _standardInlineLatex(String formula) => '\\($formula\\)';
+
+  static String _standardBlockLatex(String formula) => '\\[\n$formula\n\\]';
 
   static pw.Widget _textBlock(String text) {
     return pw.Padding(

@@ -2,8 +2,6 @@ import 'package:docx_creator/docx_creator.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
-import 'headless_webview_render.dart';
-
 class DocxExportWarning {
   final String message;
 
@@ -22,11 +20,10 @@ class MarkdownDocxExporter {
 
   static Future<DocxExportResult> generate({
     required String markdown,
-    SvgRenderer? renderer,
     String? title,
   }) async {
-    // Keep the renderer parameter for API compatibility. Ordinary Markdown
-    // uses docx_creator's native parser and preserves Word run formatting.
+    // Ordinary Markdown uses docx_creator's native parser and preserves Word
+    // run formatting. Special syntax remains editable source text.
     final warnings = <DocxExportWarning>[];
     final builder = docx().section(
       pageSize: DocxPageSize.a4,
@@ -60,12 +57,10 @@ class MarkdownDocxExporter {
 
 Future<Uint8List> exportMarkdownToDocx(
   String markdown, {
-  SvgRenderer? renderer,
   String? title,
 }) async {
   final result = await MarkdownDocxExporter.generate(
     markdown: markdown,
-    renderer: renderer,
     title: title,
   );
   return result.bytes;

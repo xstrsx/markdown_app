@@ -3,27 +3,22 @@ import 'package:md_editor/services/pdf_export_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  test('reports a warning when Mermaid code is exported', () async {
+  test('keeps Mermaid source without SVG rendering', () async {
     final result = await PdfExportService.generate(
       markdown: '```mermaid\ngraph TD\n  A --> B\n```',
     );
 
     expect(result.bytes.sublist(0, 5), equals([37, 80, 68, 70, 45]));
-    expect(
-      result.warnings.map((warning) => warning.message),
-      contains('Mermaid 图表已降级为源码'),
-    );
+    expect(result.warnings, isEmpty);
   });
 
-  test('reports a warning when LaTeX is exported as text', () async {
+  test('normalizes inline and block LaTeX to standard delimiters', () async {
     final result = await PdfExportService.generate(
-      markdown: r'公式：$x^2 + y^2$。',
+      markdown: r'行内：$x^2$。' '\n\n' r'$$' '\n' r'\frac{1}{2}' '\n' r'$$',
     );
 
-    expect(
-      result.warnings.map((warning) => warning.message),
-      contains('LaTeX 公式已降级为文本'),
-    );
+    expect(result.bytes.sublist(0, 5), equals([37, 80, 68, 70, 45]));
+    expect(result.warnings, isEmpty);
   });
 
   test('rejects oversized local image data through the resolver limit',
