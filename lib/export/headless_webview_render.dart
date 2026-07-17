@@ -160,6 +160,13 @@ class _InAppWebViewSvgBridge implements HeadlessSvgBridge {
     await _webView.run();
     final controller = await _controllerCompleter.future;
     await _loadCompleter.future;
+    final pageReady = await controller.evaluateJavascript(
+      source:
+          'typeof window.renderSvg === "function" && typeof window.flutterRenderSvg === "function"',
+    );
+    if (pageReady != true && pageReady.toString() != 'true') {
+      throw StateError('本地 SVG 渲染资源未加载');
+    }
     final requestId = ++_nextRequestId;
     final result = Completer<String?>();
     _pendingResults[requestId] = result;
@@ -168,9 +175,45 @@ class _InAppWebViewSvgBridge implements HeadlessSvgBridge {
         source:
             'window.flutterRenderSvg(${jsonEncode(type)}, ${jsonEncode(content)}, $requestId)',
       );
-      return await result.future.timeout(const Duration(seconds: 30));
+      unawaited(_pollResult(controller, requestId, result));
+      return await result.future.timeout(const Duration(seconds: 16));
     } finally {
       _pendingResults.remove(requestId);
+    }
+  }
+
+  Future<void> _pollResult(
+    InAppWebViewController controller,
+    int requestId,
+    Completer<String?> result,
+  ) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 15));
+    while (!result.isCompleted && DateTime.now().isBefore(deadline)) {
+      try {
+        final raw = await controller.evaluateJavascript(
+          source:
+              'JSON.stringify(window.__flutterSvgResults[$requestId] || null)',
+        );
+        if (raw is String && raw.isNotEmpty && raw != 'null') {
+          final state = jsonDecode(raw) as Map<String, dynamic>;
+          if (state['status'] == 'ready') {
+            result.complete(state['svg']?.toString());
+            return;
+          }
+          if (state['status'] == 'error') {
+            result.completeError(StateError(
+                state['message']?.toString() ?? 'SVG 渲染失败'));
+            return;
+          }
+        }
+      } catch (error) {
+        if (!result.isCompleted) result.completeError(error);
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    if (!result.isCompleted) {
+      result.completeError(TimeoutException('SVG 渲染超时'));
     }
   }
 

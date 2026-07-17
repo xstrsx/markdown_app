@@ -7,6 +7,7 @@ void main() {
     final html = File('assets/render_assets/render.html').readAsStringSync();
 
     expect(html, contains('flutterRenderSvg'));
+    expect(html, contains('__flutterSvgResults'));
     expect(html, contains('callHandler("svgReady"'));
     expect(html, contains('callHandler("svgError"'));
   });
