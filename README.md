@@ -2,7 +2,7 @@
 
 跨平台 Markdown 编辑器，面向 Android 与 Windows，专注于稳定、清晰的 Markdown 写作与预览体验。
 
-> 实时预览 · LaTeX 数学公式 · Mermaid 图表 · PDF / HTML 导出 · 本地文件管理
+> 实时预览 · LaTeX 数学公式 · Mermaid 图表 · PDF / HTML / DOCX 导出 · 本地文件管理
 
 <p align="center">
   <img src="assets/icon/Markdown%20App.png" width="128" alt="Markdown Editor icon" />
@@ -45,6 +45,18 @@ HTML 导出目前位于**历史页面文件的三点菜单**中。
 - LaTeX 公式和 Mermaid 源码保留在 HTML 中
 - 浏览器打开 HTML 时通过 zstatic CDN 加载 KaTeX 和 Mermaid 并自动渲染
 - CDN 不可访问时，公式和图表仍显示为原始文本
+
+## DOCX 导出说明
+
+DOCX 导出目前位于**历史页面文件的三点菜单**中。
+
+- 中文正文和代码块使用内置中文字体
+- 长文档自动分页
+- 本地图片和可访问的网络图片会尝试嵌入
+- 图片无法读取时保留占位提示并继续导出
+- LaTeX 和 Mermaid 以标准文本/源码保留，不依赖 SVG 或 WebView 渲染
+- 导出不会自动保存未保存的 Markdown 修改
+
 
 ## 构建
 
@@ -89,7 +101,7 @@ GitHub Actions 支持自动执行代码分析、测试、Android 构建和 Windo
 
 ### v1.3.0
 
-- 新增 HTML 导出功能，保留普通 Markdown 格式
+- 新增 HTML 和 DOCX 导出功能，保留普通 Markdown 格式
 - HTML 页面通过 zstatic CDN 在浏览器端渲染 LaTeX 和 Mermaid
 - 预览界面的网页链接支持点击后调用系统默认浏览器打开
 - 新增历史文件菜单中的“导出为 HTML”入口
