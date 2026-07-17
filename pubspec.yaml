@@ -39,6 +39,7 @@ dependencies:
   file_picker: ^8.1.6
   path_provider: ^2.1.1
   share_plus: ^7.2.1
+  url_launcher: ^6.3.2
   
   # Image picking
   image_picker: ^1.0.4
