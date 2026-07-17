@@ -25,6 +25,16 @@ void main() {
     );
   });
 
+  test('uses the HTML extension when saving HTML bytes', () {
+    expect(
+      FileService.exportFileName(
+        defaultName: 'notes',
+        mimeType: 'text/html',
+      ),
+      'notes.html',
+    );
+  });
+
   test('deletes an existing direct file but preserves cache', () async {
     final dir = await Directory.systemTemp.createTemp('md_delete_');
     addTearDown(() => dir.delete(recursive: true));

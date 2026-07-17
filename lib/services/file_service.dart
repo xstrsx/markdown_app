@@ -71,10 +71,12 @@ class FileService {
     required String defaultName,
     required String mimeType,
   }) {
-    final extension = mimeType ==
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        ? 'docx'
-        : 'pdf';
+    final extension = switch (mimeType) {
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document' =>
+        'docx',
+      'text/html' => 'html',
+      _ => 'pdf',
+    };
     return defaultName.toLowerCase().endsWith('.$extension')
         ? defaultName
         : '$defaultName.$extension';
@@ -197,8 +199,6 @@ class FileService {
       mimeType: mimeType,
     );
     final extension = fileName.split('.').last.toLowerCase();
-    final isDocx = extension == 'docx';
-
     if (Platform.isAndroid) {
       try {
         final result = await _channel.invokeMethod<Map>('saveBytesAs', {
@@ -230,7 +230,11 @@ class FileService {
 
     try {
       final outputPath = await FilePicker.platform.saveFile(
-        dialogTitle: isDocx ? '导出 DOCX' : '导出 PDF',
+        dialogTitle: switch (extension) {
+          'docx' => '导出 DOCX',
+          'html' => '导出 HTML',
+          _ => '导出 PDF',
+        },
         fileName: fileName,
         type: FileType.custom,
         allowedExtensions: [extension],

@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/markdown_file.dart';
@@ -5,6 +8,7 @@ import '../services/file_service.dart';
 import '../services/history_service.dart';
 import '../services/pdf_export_service.dart';
 import '../export/export_docx.dart';
+import '../export/export_html.dart';
 import 'editor_page.dart';
 
 class HistoryPage extends StatefulWidget {
@@ -19,6 +23,7 @@ class _HistoryPageState extends State<HistoryPage> {
   bool _isLoading = true;
   bool _isExportingPdf = false;
   bool _isExportingDocx = false;
+  bool _isExportingHtml = false;
 
   @override
   void initState() {
@@ -139,6 +144,47 @@ class _HistoryPageState extends State<HistoryPage> {
       if (mounted) _showExportMessage('DOCX 导出失败，请稍后重试');
     } finally {
       if (mounted) setState(() => _isExportingDocx = false);
+    }
+  }
+
+  Future<void> _exportHtml(MarkdownFile file) async {
+    if (_isExportingHtml) return;
+    setState(() => _isExportingHtml = true);
+    _showExportProgress('正在准备 HTML 导出...');
+
+    try {
+      final content = await _loadMarkdownContent(file);
+      if (!mounted) return;
+      if (content == null || content.isEmpty) {
+        _showExportMessage('无法读取文件内容，无法导出 HTML');
+        return;
+      }
+
+      _showExportProgress('正在生成 HTML，请稍候...');
+      final title = file.name.replaceAll(
+        RegExp(r'\.md$|\.markdown$', caseSensitive: false),
+        '',
+      );
+      final html = markdownToHtml(content, title: title);
+      if (!mounted) return;
+
+      _showExportProgress('HTML 已生成，正在打开保存位置...');
+      final saveResult = await FileService.saveBytesAs(
+        defaultName: title,
+        bytes: Uint8List.fromList(utf8.encode(html)),
+        mimeType: 'text/html',
+      );
+      if (!mounted) return;
+      if (saveResult.status == FileSaveStatus.cancelled) return;
+      if (saveResult.isSuccess) {
+        _showExportMessage('HTML 已成功导出');
+      } else {
+        _showExportMessage(saveResult.message ?? 'HTML 导出失败，请稍后重试');
+      }
+    } catch (error) {
+      if (mounted) _showExportMessage('HTML 导出失败，请稍后重试');
+    } finally {
+      if (mounted) setState(() => _isExportingHtml = false);
     }
   }
 
@@ -372,6 +418,15 @@ class _HistoryPageState extends State<HistoryPage> {
                 if (_isExportingDocx) return;
                 Navigator.of(context).pop();
                 _exportDocx(file);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.language),
+              title: const Text('导出为 HTML'),
+              onTap: () {
+                if (_isExportingHtml) return;
+                Navigator.of(context).pop();
+                _exportHtml(file);
               },
             ),
             ListTile(
