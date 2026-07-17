@@ -64,8 +64,7 @@ class MainActivity : FlutterActivity() {
                         val uriString = call.argument<String>("uri")
                         val content = call.argument<String>("content")
                         if (uriString != null && content != null) {
-                            writeToUri(Uri.parse(uriString), content)
-                            result.success(true)
+                            result.success(writeToUri(Uri.parse(uriString), content))
                         } else {
                             result.error("ARGS", "uri and content required", null)
                         }
@@ -239,9 +238,14 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) { null }
     }
 
-    private fun writeToUri(uri: Uri, content: String) {
-        contentResolver.openOutputStream(uri, "wt")?.use { output ->
-            output.write(content.toByteArray(Charsets.UTF_8)); output.flush()
+    private fun writeToUri(uri: Uri, content: String): Boolean {
+        return try {
+            contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                output.write(content.toByteArray(Charsets.UTF_8)); output.flush()
+            } != null
+        } catch (error: Exception) {
+            Log.e("MarkdownEditor", "写回文件失败: ${uri}", error)
+            false
         }
     }
 

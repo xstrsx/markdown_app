@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -171,10 +172,11 @@ class FileService {
       {String? contentUri}) async {
     try {
       if (Platform.isAndroid && contentUri != null && contentUri.isNotEmpty) {
-        await _channel.invokeMethod('writeToUri', {
+        final result = await _channel.invokeMethod<bool>('writeToUri', {
           'uri': contentUri,
           'content': content,
         });
+        if (result != true) return false;
         // Also update local cache
         try {
           File(path).writeAsStringSync(content);
@@ -301,6 +303,12 @@ class FileService {
         bytes: bytes,
       );
       if (outputPath == null) return null;
+      final outputFile = File(outputPath);
+      await outputFile.writeAsBytes(bytes, flush: true);
+      if (!await outputFile.exists() ||
+          await outputFile.length() != bytes.length) {
+        return null;
+      }
       return PickResult(
         path: outputPath,
         displayPath: outputPath,
@@ -361,12 +369,20 @@ class FileService {
       await Share.shareXFiles([XFile(tempFile.path)], text: '分享 Markdown 文件');
     } catch (e) {
       // Fallback: share as plain text
-      await Share.share(text, subject: name);
+      try {
+        await Share.share(text, subject: name);
+      } catch (error, stackTrace) {
+        debugPrint('分享 Markdown 内容失败: $error\n$stackTrace');
+      }
     }
   }
 
   static Future<void> shareFile(String path) async {
-    await Share.shareXFiles([XFile(path)], text: '分享 Markdown 文件');
+    try {
+      await Share.shareXFiles([XFile(path)], text: '分享 Markdown 文件');
+    } catch (error, stackTrace) {
+      debugPrint('分享 Markdown 文件失败: $error\n$stackTrace');
+    }
   }
 
   static Future<void> openFileLocation(String path,

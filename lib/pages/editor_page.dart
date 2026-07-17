@@ -43,6 +43,7 @@ class _EditorPageState extends State<EditorPage>
   String? _contentUri;
   String? _cachePath;
   bool _isModified = false;
+  bool _isLoadingInitialFile = true;
   Timer? _autoSaveTimer;
   bool _isSaving = false;
   bool _isExportingPdf = false;
@@ -59,66 +60,73 @@ class _EditorPageState extends State<EditorPage>
   }
 
   Future<void> _loadInitialFile() async {
-    if (widget.file != null) {
-      final file = widget.file!;
-      _currentFile = file;
-      _contentUri = file.contentUri;
-      _cachePath = file.contentPath;
+    try {
+      if (widget.file != null) {
+        final file = widget.file!;
+        _currentFile = file;
+        _contentUri = file.contentUri;
+        _cachePath = file.contentPath;
 
-      var content = file.content;
-      if (content.isEmpty) {
-        content = await _loadContent(
-          file.contentPath,
-          file.path,
-          _contentUri,
-        );
-      }
-      _textController.text = content;
-      _isModified = false;
-      if (mounted) setState(() {});
-      if (widget.exportPdfOnOpen) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _exportPdf();
-        });
-      }
-      return;
-    }
-
-    if (widget.initialFilePath != null) {
-      final cachePath = widget.initialFilePath!;
-      final loaded = await FileService.openFile(cachePath);
-      if (loaded != null) {
-        final displayPath = widget.initialDisplayPath ?? loaded.path;
-        final contentUri = widget.initialContentUri;
-        final name = widget.initialName ?? loaded.name;
-        final text = loaded.content;
-
-        final id = contentUri ?? displayPath;
-        final contentPath = await FileService.cacheContent(text, name, id);
-
-        final updatedFile = MarkdownFile(
-          path: displayPath,
-          contentUri: contentUri,
-          contentPath: contentPath,
-          name: name,
-          content: text,
-          lastModified: loaded.lastModified,
-          size: loaded.size,
-        );
-        setState(() {
-          _currentFile = updatedFile;
-          _contentUri = contentUri;
-          _cachePath = cachePath;
-          _textController.text = text;
-          _isModified = false;
-        });
-        await HistoryService.addToHistory(updatedFile);
-        if (widget.exportPdfOnOpen && mounted) {
+        var content = file.content;
+        if (content.isEmpty) {
+          content = await _loadContent(
+            file.contentPath,
+            file.path,
+            _contentUri,
+          );
+        }
+        _textController.text = content;
+        _isModified = false;
+        if (mounted) setState(() {});
+        if (widget.exportPdfOnOpen) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _exportPdf();
           });
         }
+        return;
       }
+
+      if (widget.initialFilePath != null) {
+        final cachePath = widget.initialFilePath!;
+        final loaded = await FileService.openFile(cachePath);
+        if (loaded != null) {
+          final displayPath = widget.initialDisplayPath ?? loaded.path;
+          final contentUri = widget.initialContentUri;
+          final name = widget.initialName ?? loaded.name;
+          final text = loaded.content;
+
+          final id = contentUri ?? displayPath;
+          final contentPath = await FileService.cacheContent(text, name, id);
+
+          final updatedFile = MarkdownFile(
+            path: displayPath,
+            contentUri: contentUri,
+            contentPath: contentPath,
+            name: name,
+            content: text,
+            lastModified: loaded.lastModified,
+            size: loaded.size,
+          );
+          if (!mounted) return;
+          setState(() {
+            _currentFile = updatedFile;
+            _contentUri = contentUri;
+            _cachePath = cachePath;
+            _textController.text = text;
+            _isModified = false;
+          });
+          await HistoryService.addToHistory(updatedFile);
+          if (widget.exportPdfOnOpen && mounted) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _exportPdf();
+            });
+          }
+        }
+      }
+    } catch (error, stackTrace) {
+      debugPrint('加载初始 Markdown 文件失败: $error\n$stackTrace');
+    } finally {
+      _isLoadingInitialFile = false;
     }
   }
 
@@ -154,6 +162,7 @@ class _EditorPageState extends State<EditorPage>
 
   void _setupAutoSave() {
     _textController.addListener(() {
+      if (_isLoadingInitialFile || !mounted) return;
       if (!_isModified) setState(() => _isModified = true);
       _autoSaveTimer?.cancel();
       _autoSaveTimer = Timer(const Duration(seconds: 30), _autoSave);

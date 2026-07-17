@@ -37,6 +37,7 @@ class _HistoryPageState extends State<HistoryPage> {
     });
 
     final history = await HistoryService.getHistory();
+    if (!mounted) return;
 
     setState(() {
       _history = history;
@@ -507,7 +508,7 @@ class _HistoryPageState extends State<HistoryPage> {
 
                 if (confirm == true) {
                   await HistoryService.clearHistory();
-                  _loadHistory();
+                  if (mounted) await _loadHistory();
                 }
               },
             ),

@@ -9,40 +9,24 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.6
   
-  # Markdown rendering
-  flutter_markdown: ^0.6.18+3
+  # Markdown parsing and preview
   markdown: ^7.3.1
-  
-  # Code highlighting
-  flutter_highlighter: ^0.1.1
-  highlighter: ^0.1.1
-  
-  # Math formulas
-  flutter_math_fork: ^0.7.2
- 
-  # ===== 新增：gpt_markdown + flutter_mermaid =====
+
   gpt_markdown: ^1.1.7
   flutter_mermaid: ^0.1.0
-  # =============================================
 
   # PDF export
   pdf: ^3.11.3
-  http: ^1.2.2
 
   # DOCX export
   docx_creator: ^1.2.7
-  flutter_inappwebview: ^6.1.0
 
   # File operations
   file_picker: ^8.1.6
   path_provider: ^2.1.1
   share_plus: ^7.2.1
   url_launcher: ^6.3.2
-  
-  # Image picking
-  image_picker: ^1.0.4
   
   # Permissions
   permission_handler: ^11.3.1
@@ -72,4 +56,3 @@ flutter:
   assets:
     - assets/
     - assets/fonts/
-    - assets/render_assets/

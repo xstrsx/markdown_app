@@ -30,6 +30,19 @@
 | Navigation switches pages | ✓ |
 | Create dialog opens | ✓ |
 
+## Session: 2026-07-17 依赖清理与核心审查
+
+- 已确认当前分支 `main` 与 `origin/main` 同步，工作区初始干净。
+- 已完成源码 import 与 `dart pub deps` 对照，确认 6 个无用 direct dependencies。
+- 已确认旧 WebView/SVG 渲染器、测试与本地渲染资源没有生产引用，待清理。
+
+## Session result: 2026-07-17
+
+- 已移除无用 direct dependencies、旧 WebView/SVG 导出链路和本地渲染资源，并刷新 `pubspec.lock` 与平台插件注册清单。
+- 已修复历史记录损坏容错、页面异步生命周期、Android URI 写回结果、桌面另存为落盘校验、分享异常、PDF 远程图片大小边界和图片尺寸选项。
+- `flutter analyze`: 通过；`flutter test`: 29 项通过。
+- `flutter build apk --debug` / `flutter build windows --debug`: 因本机缺少 Android SDK / Visual Studio 工具链未执行到编译阶段。
+
 ## 5-Question Reboot Check
 | Question | Answer |
 |----------|--------|

@@ -76,11 +76,18 @@ class DefaultPdfImageResolver implements PdfImageResolver {
           final response =
               await request.close().timeout(const Duration(seconds: 10));
           if (response.statusCode >= 200 && response.statusCode < 300) {
+            if (response.contentLength > maxBytes) return null;
+            var exceeded = false;
             final bytes = await response.fold<List<int>>(<int>[], (a, b) {
-              if (a.length + b.length <= maxBytes) a.addAll(b);
+              if (exceeded) return a;
+              if (a.length + b.length > maxBytes) {
+                exceeded = true;
+                return a;
+              }
+              a.addAll(b);
               return a;
             });
-            if (bytes.length > maxBytes) return null;
+            if (exceeded) return null;
             return Uint8List.fromList(bytes);
           }
         } on SocketException {
@@ -153,6 +160,8 @@ class PdfExportService {
         sourceDirectory,
         regularFont,
         emojiFont,
+        options.maxImageWidth,
+        options.maxImageHeight,
       );
 
       document.addPage(
@@ -193,6 +202,8 @@ class PdfExportService {
     String? sourceDirectory,
     pw.Font regularFont,
     pw.Font emojiFont,
+    double maxImageWidth,
+    double maxImageHeight,
   ) async {
     final widgets = <pw.Widget>[];
     for (final node in nodes) {
@@ -214,6 +225,8 @@ class PdfExportService {
               sourceDirectory,
               regularFont,
               emojiFont,
+              maxImageWidth,
+              maxImageHeight,
             ));
             break;
           case 'blockquote':
@@ -243,14 +256,18 @@ class PdfExportService {
               warnings,
               imageResolver,
               sourceDirectory,
+              regularFont,
+              emojiFont,
+              maxImageWidth,
+              maxImageHeight,
             ));
             break;
           default:
-            widgets.add(_textBlock(node.textContent));
+            widgets.add(_textBlock(node.textContent, regularFont, emojiFont));
             break;
         }
       } else if (node.textContent.trim().isNotEmpty) {
-        widgets.add(_textBlock(node.textContent));
+        widgets.add(_textBlock(node.textContent, regularFont, emojiFont));
       }
     }
     return widgets;
@@ -293,6 +310,8 @@ class PdfExportService {
     String? sourceDirectory,
     pw.Font regularFont,
     pw.Font emojiFont,
+    double maxImageWidth,
+    double maxImageHeight,
   ) async {
     final blockFormula = _blockLatex(node.textContent);
     if (blockFormula != null) {
@@ -312,6 +331,10 @@ class PdfExportService {
             warnings,
             imageResolver,
             sourceDirectory,
+            regularFont,
+            emojiFont,
+            maxImageWidth,
+            maxImageHeight,
           ),
           if (node.textContent.trim().isNotEmpty &&
               node.textContent.trim() != image.textContent.trim())
@@ -458,10 +481,14 @@ class PdfExportService {
     List<PdfExportWarning> warnings,
     PdfImageResolver imageResolver,
     String? sourceDirectory,
+    pw.Font regularFont,
+    pw.Font emojiFont,
+    double maxImageWidth,
+    double maxImageHeight,
   ) async {
     if (source.isEmpty) {
       warnings.add(const PdfExportWarning('图片地址为空'));
-      return _warningBlock(alt ?? '图片无法导出');
+      return _warningBlock(alt ?? '图片无法导出', regularFont, emojiFont);
     }
     final bytes = await imageResolver.resolve(
       source,
@@ -469,20 +496,24 @@ class PdfExportService {
     );
     if (bytes == null) {
       warnings.add(PdfExportWarning('图片无法导出: $source'));
-      return _warningBlock(alt ?? '图片无法导出');
+      return _warningBlock(alt ?? '图片无法导出', regularFont, emojiFont);
     }
     return pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 8),
       child: pw.Image(
         pw.MemoryImage(bytes),
         fit: pw.BoxFit.contain,
-        width: 520,
-        height: 680,
+        width: maxImageWidth,
+        height: maxImageHeight,
       ),
     );
   }
 
-  static pw.Widget _warningBlock(String text) {
+  static pw.Widget _warningBlock(
+    String text,
+    pw.Font regularFont,
+    pw.Font emojiFont,
+  ) {
     return pw.Container(
       width: double.infinity,
       margin: const pw.EdgeInsets.only(bottom: 8),
@@ -491,7 +522,14 @@ class PdfExportService {
         color: PdfColors.amber50,
         border: pw.Border.all(color: PdfColors.amber200),
       ),
-      child: pw.Text(text, style: const pw.TextStyle(fontSize: 10)),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: 10,
+          font: regularFont,
+          fontFallback: [emojiFont],
+        ),
+      ),
     );
   }
 
@@ -507,7 +545,9 @@ class PdfExportService {
                 const Iterable<md.Element>.empty())
             .toList() ??
         const <md.Element>[];
-    if (rows.isEmpty) return _textBlock(node.textContent);
+    if (rows.isEmpty) {
+      return _textBlock(node.textContent, regularFont, emojiFont);
+    }
 
     final tableRows = <pw.TableRow>[];
     for (final row in rows) {
@@ -689,11 +729,22 @@ class PdfExportService {
 
   static String _standardBlockLatex(String formula) => '\\[\n$formula\n\\]';
 
-  static pw.Widget _textBlock(String text) {
+  static pw.Widget _textBlock(
+    String text,
+    pw.Font regularFont,
+    pw.Font emojiFont,
+  ) {
     return pw.Padding(
       padding: const pw.EdgeInsets.only(bottom: 8),
-      child:
-          pw.Text(text, style: const pw.TextStyle(fontSize: 11, height: 1.5)),
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(
+          fontSize: 11,
+          height: 1.5,
+          font: regularFont,
+          fontFallback: [emojiFont],
+        ),
+      ),
     );
   }
 }

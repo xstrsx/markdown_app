@@ -4,7 +4,7 @@
 维护和增强 Flutter Markdown 编辑器，支持 Android 和 Windows 桌面端，具备完整的文件编辑、保存、历史管理和 CI 自动构建能力。
 
 ## Current Phase
-维护阶段 — 等待新任务
+维护阶段 — 依赖清理与核心代码审查（2026-07-17）
 
 ## Phases
 
@@ -74,3 +74,11 @@
 | file_picker bytes=null 致 saveFileAs 失败 | 1 | 自有 MethodChannel 写入实际内容 |
 | resolveRealPath 在 Android 11+ 返回 null | 2 | 本地内容缓存 + contentURI 回退 |
 | URI 权限过期致历史重打开空白 | 2 | 持久化 contentPath 缓存 |
+
+### Phase 11: 依赖清理与核心代码审查（已完成）
+- [x] 核对直接依赖和源码引用
+- [x] 移除无用依赖及废弃 WebView/SVG 渲染资源
+- [x] 审查并修复高置信度核心问题
+- [x] 运行 `flutter pub get`、`flutter analyze`、`flutter test`
+- [ ] 提交并推送到 `origin/main`
+- **Status:** in progress

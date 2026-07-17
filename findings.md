@@ -1,5 +1,23 @@
 # Findings & Decisions
 
+## 2026-07-17 依赖与核心审查
+
+- `pubspec.yaml` 中 `cupertino_icons`、`flutter_markdown`、`flutter_highlighter`、`highlighter`、`http`、`image_picker` 没有 `lib/` 或 `test/` 的直接引用。
+- `flutter_math_fork` 没有直接引用，由 `gpt_markdown` 传递使用，移除 direct dependency 后仍会保留在依赖树中。
+- `flutter_inappwebview` 仅被 `lib/export/headless_webview_render.dart` 及其测试使用；该路径已经不符合当前“PDF/DOCX 不渲染 SVG、HTML 使用 CDN”的导出约束，可整体删除。
+- `assets/render_assets/` 仅被旧 WebView 渲染器和契约测试使用，可随旧路径删除，避免继续打包 KaTeX/Mermaid 本地资源。
+- README 技术栈表已移除 `image_picker`；版本记录中的 `flutter_markdown` 迁移文字是历史说明，不代表当前依赖。
+- Flutter widget 测试绑定会拦截 `HttpClient` 网络请求并返回 400，无法用本地 HTTP 服务验证远程图片分块读取；该边界改为代码审查后修复，保留可稳定运行的本地大小限制测试。
+- 原生打包未能在本机执行：`flutter doctor -v` 显示没有 Android SDK，也没有 Visual Studio Desktop C++ 工具链；`flutter build apk --debug` 和 `flutter build windows --debug` 均在编译前退出。
+
+### 已完成修复
+
+- 移除 6 个无用 direct dependencies，`flutter_math_fork` 和 `http` 保留为现有库的传递依赖。
+- 删除旧 InAppWebView SVG 渲染器、测试、本地 KaTeX/Mermaid 资源及自动生成的插件注册项。
+- 历史记录逐条容错并记录错误；首页、历史页、编辑器初始化增加异步生命周期保护。
+- Android SAF 写回检查真实结果，桌面 Markdown 另存为显式写入并校验文件长度，分享失败不再形成未处理异步异常。
+- PDF 远程图片超限返回失败而不是截断数据，且图片尺寸选项现在真正生效；通用 PDF 文本和图片警告使用中文字体回退。
+
 ## 项目概况
 
 | 项目 | 值 |

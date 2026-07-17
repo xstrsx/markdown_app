@@ -76,7 +76,7 @@ GitHub Actions 支持自动执行代码分析、测试、Android 构建和 Windo
 | HTML 生成 | markdown / Dart 文件 API |
 | 系统浏览器 | url_launcher |
 | 文件操作 | file_picker（桌面）/ SAF MethodChannel（Android） |
-| 图片与网络 | image_picker / Dart HttpClient |
+| 图片与网络 | Dart HttpClient（PDF 网络图片） |
 | 权限 | permission_handler |
 | 本地存储 | shared_preferences / path_provider |
 | 窗口管理 | window_manager |

@@ -27,6 +27,7 @@ class _HomePageState extends State<HomePage> {
     });
 
     final files = await HistoryService.getRecentFiles(limit: 3);
+    if (!mounted) return;
 
     setState(() {
       _recentFiles = files;
