@@ -80,5 +80,5 @@
 - [x] 移除无用依赖及废弃 WebView/SVG 渲染资源
 - [x] 审查并修复高置信度核心问题
 - [x] 运行 `flutter pub get`、`flutter analyze`、`flutter test`
-- [ ] 提交并推送到 `origin/main`
-- **Status:** in progress
+- [x] 提交并推送到 `origin/main`
+- **Status:** complete
