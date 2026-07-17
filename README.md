@@ -2,7 +2,7 @@
 
 跨平台 Markdown 编辑器，面向 Android 与 Windows，专注于稳定、清晰的 Markdown 写作与预览体验。
 
-> 实时预览 · LaTeX 数学公式 · Mermaid 图表 · PDF 导出 · 本地文件管理
+> 实时预览 · LaTeX 数学公式 · Mermaid 图表 · PDF / HTML 导出 · 本地文件管理
 
 <p align="center">
   <img src="assets/icon/Markdown%20App.png" width="128" alt="Markdown Editor icon" />
@@ -16,10 +16,11 @@
 - **GFM Markdown** — 支持标题、列表、表格、任务列表、删除线、引用和代码块
 - **代码高亮** — 代码块使用等宽字体展示，适合技术文档编写
 - **PDF 导出** — 从历史文件菜单导出 A4 PDF，支持多页排版、中文字体、图片和降级提示
+- **HTML 导出** — 从历史文件菜单导出 HTML，保留 Markdown 格式；浏览器在线加载 KaTeX 和 Mermaid
 - **本地文件管理** — 打开、编辑、保存、另存为 Markdown 文件
 - **Android SAF 支持** — 使用系统文件选择器读写外部存储文件，保留原文件访问能力
 - **编辑历史** — 自动记录最近编辑的文件，并通过本地缓存支持重启后继续编辑
-- **图片与链接** — 通过工具栏快速插入图片地址和链接地址
+- **图片与链接** — 通过工具栏快速插入图片地址和链接地址，预览中的网页链接可直接使用系统浏览器打开
 - **文件分享** — 分享 Markdown 文件或当前文档内容
 - **深色模式** — 跟随系统主题切换
 
@@ -33,8 +34,17 @@ PDF 导出目前只保留在**历史页面文件的三点菜单**中，编辑页
 - 长文档自动分页
 - 本地图片和可访问的网络图片会尝试嵌入
 - 图片无法读取时保留占位提示并继续导出
-- LaTeX 和 Mermaid 当前采用可用时导出、不可用时降级为文本/源码的策略
+- LaTeX 和 Mermaid 以标准文本/源码保留，不依赖 SVG 或 WebView 渲染
 - 导出不会自动保存未保存的 Markdown 修改
+
+## HTML 导出说明
+
+HTML 导出目前位于**历史页面文件的三点菜单**中。
+
+- 普通 Markdown 格式由现有 `markdown` 库解析并写入 HTML
+- LaTeX 公式和 Mermaid 源码保留在 HTML 中
+- 浏览器打开 HTML 时通过 zstatic CDN 加载 KaTeX 和 Mermaid 并自动渲染
+- CDN 不可访问时，公式和图表仍显示为原始文本
 
 ## 构建
 
@@ -63,6 +73,8 @@ GitHub Actions 支持自动执行代码分析、测试、Android 构建和 Windo
 | 数学公式预览 | flutter_math_fork（由 gpt_markdown 使用） |
 | Mermaid 预览 | flutter_mermaid |
 | PDF 生成 | pdf |
+| HTML 生成 | markdown / Dart 文件 API |
+| 系统浏览器 | url_launcher |
 | 文件操作 | file_picker（桌面）/ SAF MethodChannel（Android） |
 | 图片与网络 | image_picker / Dart HttpClient |
 | 权限 | permission_handler |
@@ -74,6 +86,13 @@ GitHub Actions 支持自动执行代码分析、测试、Android 构建和 Windo
 首次访问外部存储文件时，Android 可能需要在系统设置中开启「允许管理所有文件」权限。通过系统文件选择器选择的文件同时使用 Android SAF URI 进行读写，以兼容不同存储提供程序。
 
 ## 版本记录
+
+### v1.3.0
+
+- 新增 HTML 导出功能，保留普通 Markdown 格式
+- HTML 页面通过 zstatic CDN 在浏览器端渲染 LaTeX 和 Mermaid
+- 预览界面的网页链接支持点击后调用系统默认浏览器打开
+- 新增历史文件菜单中的“导出为 HTML”入口
 
 ### v1.2.0
 
