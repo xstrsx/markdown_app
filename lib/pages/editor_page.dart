@@ -10,6 +10,9 @@ import '../services/pdf_export_service.dart';
 import '../widgets/editor_toolbar.dart';
 import '../widgets/markdown_preview.dart';
 
+bool contentChangedSinceSave(String savedContent, String currentContent) =>
+    savedContent != currentContent;
+
 class EditorPage extends StatefulWidget {
   final MarkdownFile? file;
   final String? initialFilePath;
@@ -164,9 +167,13 @@ class _EditorPageState extends State<EditorPage>
     _textController.addListener(() {
       if (_isLoadingInitialFile || !mounted) return;
       if (!_isModified) setState(() => _isModified = true);
-      _autoSaveTimer?.cancel();
-      _autoSaveTimer = Timer(const Duration(seconds: 30), _autoSave);
+      _scheduleAutoSave();
     });
+  }
+
+  void _scheduleAutoSave() {
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = Timer(const Duration(seconds: 30), _autoSave);
   }
 
   Future<void> _autoSave() async {
@@ -180,29 +187,39 @@ class _EditorPageState extends State<EditorPage>
     }
     setState(() => _isSaving = true);
 
+    final contentToSave = _textController.text;
     final writePath = _getWritablePath();
     final success = await FileService.saveFile(
       writePath,
-      _textController.text,
+      contentToSave,
       contentUri: _contentUri,
     );
 
     if (success) {
       final name = _currentFile!.name;
-      final content = _textController.text;
       final id = _contentUri ?? _currentFile!.path;
-      final contentPath = await FileService.cacheContent(content, name, id);
+      final contentPath = await FileService.cacheContent(
+        contentToSave,
+        name,
+        id,
+      );
+      final hasPendingChanges = contentChangedSinceSave(
+        contentToSave,
+        _textController.text,
+      );
       final updatedFile = _currentFile!.copyWith(
-        content: content,
+        content: contentToSave,
         contentPath: contentPath,
         lastModified: DateTime.now(),
-        size: content.length,
+        size: contentToSave.length,
       );
+      if (!mounted) return;
       setState(() {
         _currentFile = updatedFile;
-        _isModified = false;
+        _isModified = hasPendingChanges;
       });
       await HistoryService.addToHistory(updatedFile);
+      if (hasPendingChanges && mounted) _scheduleAutoSave();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('已保存：${_currentFile!.name}')),
