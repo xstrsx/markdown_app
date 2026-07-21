@@ -102,6 +102,48 @@ void main() {
     );
     expect(passwordField.obscureText, isTrue);
   });
+
+  testWidgets('syncs WebDAV fields when settings load asynchronously',
+      (tester) async {
+    final settings = ValueNotifier(const AppSettings.defaults());
+    addTearDown(settings.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SettingsPage(
+          settingsListenable: settings,
+          onChanged: (value) => settings.value = value,
+        ),
+      ),
+    );
+
+    settings.value = settings.value.copyWith(
+      webDav: const WebDavConfig(
+        enabled: true,
+        serverUrl: 'https://dav.example.com',
+        username: 'alice',
+        rootPath: '/notes',
+        password: 'secret',
+      ),
+    );
+    await tester.pump();
+
+    final webDavSwitch = tester.widget<SwitchListTile>(
+      find.ancestor(
+        of: find.text('启用 WebDAV'),
+        matching: find.byType(SwitchListTile),
+      ),
+    );
+    expect(webDavSwitch.value, isTrue);
+
+    final urlField = tester.widget<TextField>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is TextField && widget.decoration?.labelText == '服务器地址',
+      ),
+    );
+    expect(urlField.controller?.text, 'https://dav.example.com');
+  });
 }
 
 class _SettingsFakeGateway implements WebDavGateway {

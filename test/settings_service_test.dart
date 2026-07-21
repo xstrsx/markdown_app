@@ -134,6 +134,36 @@ void main() {
       ).isComplete,
       isFalse,
     );
+    expect(
+      const WebDavConfig(
+        enabled: true,
+        serverUrl: 'https://',
+        username: '',
+        rootPath: '/notes',
+        password: '',
+      ).isComplete,
+      isFalse,
+    );
+    expect(
+      const WebDavConfig(
+        enabled: true,
+        serverUrl: 'https://dav.example.com',
+        username: '',
+        rootPath: '/../outside',
+        password: '',
+      ).isComplete,
+      isFalse,
+    );
+  });
+
+  test('does not write secure storage when WebDAV is not configured', () async {
+    SharedPreferences.setMockInitialValues({});
+    final secureStore = FakeSecureSettingsStore();
+    SettingsService.debugSecureStorage = secureStore;
+
+    await SettingsService.save(const AppSettings.defaults());
+
+    expect(secureStore.values, isEmpty);
   });
 
   test('saves WebDAV password through secure storage', () async {
@@ -160,7 +190,17 @@ void main() {
     SettingsService.debugSecureStorage = _ThrowingSecureSettingsStore();
 
     await expectLater(
-      SettingsService.save(const AppSettings.defaults()),
+      SettingsService.save(
+        const AppSettings.defaults().copyWith(
+          webDav: const WebDavConfig(
+            enabled: false,
+            serverUrl: 'https://dav.example.com',
+            username: '',
+            rootPath: '/notes',
+            password: '',
+          ),
+        ),
+      ),
       completes,
     );
   });

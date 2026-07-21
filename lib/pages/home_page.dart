@@ -110,6 +110,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _openFile() async {
     final storage = await _chooseStorage();
+    if (!mounted) return;
     if (storage == null && widget.settingsListenable.value.webDav.isComplete) {
       return;
     }

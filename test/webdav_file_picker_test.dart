@@ -119,4 +119,20 @@ void main() {
       '当前文档.md',
     );
   });
+
+  testWidgets('shows an error when the initial directory escapes the root',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WebDavFilePickerPage(
+          service: pickerService(),
+          saveMode: true,
+          initialDirectory: '/../outside',
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('读取云端目录失败'), findsOneWidget);
+  });
 }

@@ -42,7 +42,7 @@ class WebDavService {
 
   WebDavService(this.config, {WebDavGateway? gateway})
       : _gateway = gateway ?? WebDavClientGateway(config) {
-    _rootPath = _normalizeAbsolute(config.rootPath);
+    _rootPath = _normalizeAbsolute(config.rootPath.trim());
   }
 
   String get rootPath => _rootPath;
@@ -118,7 +118,7 @@ class WebDavService {
     } on WebDavPathException {
       rethrow;
     } catch (error, stackTrace) {
-      debugPrint('WebDAV $operation 失败: $error\n$stackTrace');
+      debugPrint('WebDAV $operation 失败: ${error.runtimeType}\n$stackTrace');
       throw WebDavException(operation, error);
     }
   }

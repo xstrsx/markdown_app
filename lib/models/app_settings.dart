@@ -24,10 +24,30 @@ class WebDavConfig {
 
   bool get isComplete {
     final uri = Uri.tryParse(serverUrl.trim());
-    return enabled &&
-        uri != null &&
-        (uri.scheme == 'http' || uri.scheme == 'https') &&
-        rootPath.trim().startsWith('/');
+    final root = rootPath.trim();
+    if (!enabled ||
+        uri == null ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        root.isEmpty ||
+        !root.startsWith('/') ||
+        root.contains('?') ||
+        root.contains('#')) {
+      return false;
+    }
+
+    var depth = 0;
+    for (final segment in root.split('/')) {
+      if (segment.isEmpty || segment == '.') continue;
+      if (segment == '..') {
+        if (depth == 0) return false;
+        depth--;
+      } else {
+        depth++;
+      }
+    }
+    return true;
   }
 
   WebDavConfig copyWith({

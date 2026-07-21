@@ -31,6 +31,8 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _webDavRootController;
   late bool _webDavEnabled;
   bool _testingWebDav = false;
+  bool _webDavDraftDirty = false;
+  bool _syncingWebDavDraft = false;
 
   @override
   void initState() {
@@ -45,6 +47,28 @@ class _SettingsPageState extends State<SettingsPage> {
     _webDavUsernameController = TextEditingController(text: webDav.username);
     _webDavPasswordController = TextEditingController(text: webDav.password);
     _webDavRootController = TextEditingController(text: webDav.rootPath);
+    _webDavUrlController.addListener(_onWebDavDraftChanged);
+    _webDavUsernameController.addListener(_onWebDavDraftChanged);
+    _webDavPasswordController.addListener(_onWebDavDraftChanged);
+    _webDavRootController.addListener(_onWebDavDraftChanged);
+  }
+
+  void _onWebDavDraftChanged() {
+    if (!_syncingWebDavDraft) _webDavDraftDirty = true;
+  }
+
+  void _syncWebDavDraft(WebDavConfig webDav) {
+    _syncingWebDavDraft = true;
+    try {
+      _webDavEnabled = webDav.enabled;
+      _webDavUrlController.text = webDav.serverUrl;
+      _webDavUsernameController.text = webDav.username;
+      _webDavPasswordController.text = webDav.password;
+      _webDavRootController.text = webDav.rootPath;
+      _webDavDraftDirty = false;
+    } finally {
+      _syncingWebDavDraft = false;
+    }
   }
 
   void _onMinutesFocusChanged() {
@@ -88,6 +112,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _showWebDavMessage('请填写有效的 WebDAV 地址和远程根目录');
       return;
     }
+    _webDavDraftDirty = false;
     widget.onChanged(settings.copyWith(webDav: config));
     _showWebDavMessage('WebDAV 配置已保存');
   }
@@ -121,6 +146,10 @@ class _SettingsPageState extends State<SettingsPage> {
   void dispose() {
     _minutesFocusNode.dispose();
     _minutesController.dispose();
+    _webDavUrlController.removeListener(_onWebDavDraftChanged);
+    _webDavUsernameController.removeListener(_onWebDavDraftChanged);
+    _webDavPasswordController.removeListener(_onWebDavDraftChanged);
+    _webDavRootController.removeListener(_onWebDavDraftChanged);
     _webDavUrlController.dispose();
     _webDavUsernameController.dispose();
     _webDavPasswordController.dispose();
@@ -136,6 +165,9 @@ class _SettingsPageState extends State<SettingsPage> {
         final minutes = settings.autoSaveMinutes.toString();
         if (!_minutesFocusNode.hasFocus && _minutesController.text != minutes) {
           _minutesController.text = minutes;
+        }
+        if (!_webDavDraftDirty && _draftWebDav() != settings.webDav) {
+          _syncWebDavDraft(settings.webDav);
         }
 
         return Scaffold(
@@ -202,7 +234,10 @@ class _SettingsPageState extends State<SettingsPage> {
                 title: const Text('启用 WebDAV'),
                 value: _webDavEnabled,
                 onChanged: (enabled) {
-                  setState(() => _webDavEnabled = enabled);
+                  setState(() {
+                    _webDavEnabled = enabled;
+                    _webDavDraftDirty = true;
+                  });
                 },
               ),
               TextField(

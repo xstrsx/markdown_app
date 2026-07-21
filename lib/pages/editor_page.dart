@@ -407,24 +407,24 @@ class _EditorPageState extends State<EditorPage>
   Future<void> _saveAsCloud() async {
     final config = widget.settingsListenable?.value.webDav;
     if (config == null || !config.isComplete) return;
-    final service =
-        widget.webDavServiceFactory?.call(config) ?? WebDavService(config);
-    final currentPath = _currentFile?.remotePath;
-    final selectedPath = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (context) => WebDavFilePickerPage(
-          service: service,
-          saveMode: true,
-          initialDirectory:
-              currentPath == null ? null : _parentRemotePath(currentPath),
-          initialFileName: _currentFile?.name ?? '未命名.md',
-        ),
-      ),
-    );
-    if (selectedPath == null) return;
-
-    final content = _textController.text;
     try {
+      final service =
+          widget.webDavServiceFactory?.call(config) ?? WebDavService(config);
+      final currentPath = _currentFile?.remotePath;
+      final selectedPath = await Navigator.of(context).push<String>(
+        MaterialPageRoute(
+          builder: (context) => WebDavFilePickerPage(
+            service: service,
+            saveMode: true,
+            initialDirectory:
+                currentPath == null ? null : _parentRemotePath(currentPath),
+            initialFileName: _currentFile?.name ?? '未命名.md',
+          ),
+        ),
+      );
+      if (selectedPath == null) return;
+
+      final content = _textController.text;
       await service.upload(selectedPath, utf8.encode(content));
       final name = _remoteName(selectedPath);
       final contentPath = await FileService.cacheContent(

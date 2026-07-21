@@ -31,11 +31,18 @@ class _WebDavFilePickerPageState extends State<WebDavFilePickerPage> {
   @override
   void initState() {
     super.initState();
-    _directory = widget.service.normalizePath(
-      widget.initialDirectory ?? widget.service.rootPath,
-    );
+    _directory = widget.service.rootPath;
     _fileNameController = TextEditingController(text: widget.initialFileName);
-    _loadDirectory();
+    try {
+      _directory = widget.service.normalizePath(
+        widget.initialDirectory ?? widget.service.rootPath,
+      );
+      _loadDirectory();
+    } catch (error, stackTrace) {
+      debugPrint('初始化 WebDAV 目录失败: $error\n$stackTrace');
+      _error = error;
+      _loading = false;
+    }
   }
 
   Future<void> _loadDirectory() async {
@@ -62,10 +69,21 @@ class _WebDavFilePickerPageState extends State<WebDavFilePickerPage> {
       Navigator.of(context).pop(entry.path);
       return;
     }
-    setState(() {
-      _directory = widget.service.normalizePath(entry.path);
-    });
-    await _loadDirectory();
+    try {
+      final nextDirectory = widget.service.normalizePath(entry.path);
+      if (!mounted) return;
+      setState(() {
+        _directory = nextDirectory;
+      });
+      await _loadDirectory();
+    } catch (error, stackTrace) {
+      debugPrint('进入 WebDAV 子目录失败: $error\n$stackTrace');
+      if (!mounted) return;
+      setState(() {
+        _error = error;
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _goUp() async {

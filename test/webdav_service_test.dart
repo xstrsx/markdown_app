@@ -72,6 +72,15 @@ void main() {
     );
   });
 
+  test('trims the configured root path before using it', () {
+    final service = WebDavService(
+      testConfig.copyWith(rootPath: '  /notes  '),
+      gateway: FakeWebDavGateway(),
+    );
+
+    expect(service.rootPath, '/notes');
+  });
+
   test('uploads and downloads UTF-8 bytes through the gateway', () async {
     final gateway = FakeWebDavGateway();
     final service = WebDavService(testConfig, gateway: gateway);

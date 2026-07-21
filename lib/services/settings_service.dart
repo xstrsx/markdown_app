@@ -31,16 +31,15 @@ class SettingsService {
       final prefs = await _getSharedPreferences();
       const defaults = AppSettings.defaults();
       final themeValue = prefs.getString(_themeModeKey);
-      final webDavEnabled = prefs.getBool(_webDavEnabledKey) ?? false;
-      final webDavUrl = prefs.getString(_webDavUrlKey) ?? '';
-      final webDavUsername = prefs.getString(_webDavUsernameKey) ?? '';
-      final webDavRootPath = prefs.getString(_webDavRootPathKey) ?? '/';
+      final webDavWithoutPassword = WebDavConfig(
+        enabled: prefs.getBool(_webDavEnabledKey) ?? false,
+        serverUrl: prefs.getString(_webDavUrlKey) ?? '',
+        username: prefs.getString(_webDavUsernameKey) ?? '',
+        rootPath: prefs.getString(_webDavRootPathKey) ?? '/',
+        password: '',
+      );
       var password = '';
-      final hasWebDavConfiguration = webDavEnabled ||
-          webDavUrl.trim().isNotEmpty ||
-          webDavUsername.trim().isNotEmpty ||
-          webDavRootPath.trim() != '/';
-      if (hasWebDavConfiguration) {
+      if (_hasWebDavConfiguration(webDavWithoutPassword)) {
         try {
           password = await _getSecureStorage().read(_webDavPasswordKey) ?? '';
         } catch (error, stackTrace) {
@@ -55,13 +54,7 @@ class SettingsService {
         autoSaveMinutes: normalizeMinutes(
           prefs.getInt(_autoSaveMinutesKey) ?? defaults.autoSaveMinutes,
         ),
-        webDav: WebDavConfig(
-          enabled: webDavEnabled,
-          serverUrl: webDavUrl,
-          username: webDavUsername,
-          rootPath: webDavRootPath,
-          password: password,
-        ),
+        webDav: webDavWithoutPassword.copyWith(password: password),
       );
     } catch (error, stackTrace) {
       debugPrint('读取应用设置失败: $error\n$stackTrace');
@@ -95,13 +88,15 @@ class SettingsService {
           'autoSaveEnabled=$autoSaveEnabledSaved, minutes=$minutesSaved',
         );
       }
-      try {
-        await _getSecureStorage().write(
-          _webDavPasswordKey,
-          normalized.webDav.password,
-        );
-      } catch (error, stackTrace) {
-        debugPrint('保存 WebDAV 密码失败: $error\n$stackTrace');
+      if (_hasWebDavConfiguration(normalized.webDav)) {
+        try {
+          await _getSecureStorage().write(
+            _webDavPasswordKey,
+            normalized.webDav.password,
+          );
+        } catch (error, stackTrace) {
+          debugPrint('保存 WebDAV 密码失败: $error\n$stackTrace');
+        }
       }
       await prefs.setBool(_webDavEnabledKey, normalized.webDav.enabled);
       await prefs.setString(_webDavUrlKey, normalized.webDav.serverUrl.trim());
@@ -126,6 +121,13 @@ class SettingsService {
 
   static SecureSettingsStore _getSecureStorage() {
     return debugSecureStorage ?? FlutterSecureSettingsStore();
+  }
+
+  static bool _hasWebDavConfiguration(WebDavConfig webDav) {
+    return webDav.enabled ||
+        webDav.serverUrl.trim().isNotEmpty ||
+        webDav.username.trim().isNotEmpty ||
+        webDav.rootPath.trim() != '/';
   }
 
   static ThemeMode _themeModeFromString(String value) {
