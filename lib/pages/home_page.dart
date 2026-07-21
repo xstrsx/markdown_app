@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../models/app_settings.dart';
 import '../models/markdown_file.dart';
+import '../models/webdav_entry.dart';
 import '../services/file_service.dart';
 import '../services/history_service.dart';
 import '../services/webdav_service.dart';
@@ -211,6 +212,12 @@ class _HomePageState extends State<HomePage> {
       );
       if (path == null || !mounted) return;
       final content = utf8.decode(await service.download(path));
+      WebDavEntry? metadata;
+      try {
+        metadata = await service.getMetadata(path);
+      } catch (error, stackTrace) {
+        debugPrint('读取云端文件元数据失败: $error\n$stackTrace');
+      }
       final contentPath = await FileService.cacheContent(
         content,
         _fileName(path),
@@ -225,6 +232,8 @@ class _HomePageState extends State<HomePage> {
         content: content,
         lastModified: DateTime.now(),
         size: content.length,
+        remoteModified: metadata?.modified,
+        remoteSize: metadata?.size,
       );
       if (!mounted) return;
       Navigator.of(context)

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/app_settings.dart';
 import '../models/markdown_file.dart';
+import '../models/webdav_entry.dart';
 import '../services/file_service.dart';
 import '../services/history_service.dart';
 import '../services/pdf_export_service.dart';
@@ -80,6 +81,12 @@ class _HistoryPageState extends State<HistoryPage> {
     try {
       final service = widget.webDavServiceFactory(config);
       final content = utf8.decode(await service.download(file.remotePath!));
+      WebDavEntry? metadata;
+      try {
+        metadata = await service.getMetadata(file.remotePath!);
+      } catch (error, stackTrace) {
+        debugPrint('读取历史云端文件元数据失败: $error\n$stackTrace');
+      }
       final contentPath = await FileService.cacheContent(
         content,
         file.name,
@@ -90,6 +97,8 @@ class _HistoryPageState extends State<HistoryPage> {
         contentPath: contentPath,
         lastModified: DateTime.now(),
         size: content.length,
+        remoteModified: metadata?.modified,
+        remoteSize: metadata?.size,
       );
       if (!mounted) return;
       Navigator.of(context)

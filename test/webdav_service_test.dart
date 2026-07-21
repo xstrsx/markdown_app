@@ -114,6 +114,29 @@ void main() {
     expect(entries.map((entry) => entry.name), ['sub', 'a.md']);
   });
 
+  test('reads remote file metadata from its parent directory', () async {
+    final modified = DateTime(2026, 7, 21, 10, 30);
+    final gateway = FakeWebDavGateway(
+      initialDirectories: {
+        '/notes': [
+          WebDavEntry(
+            name: 'a.md',
+            path: '/notes/a.md',
+            type: WebDavEntryType.file,
+            size: 12,
+            modified: modified,
+          ),
+        ],
+      },
+    );
+    final service = WebDavService(testConfig, gateway: gateway);
+
+    final metadata = await service.getMetadata('/notes/a.md');
+
+    expect(metadata?.modified, modified);
+    expect(metadata?.size, 12);
+  });
+
   test('converts gateway failures to a safe WebDAV exception', () async {
     final gateway = FakeWebDavGateway()..shouldFail = true;
     final service = WebDavService(testConfig, gateway: gateway);

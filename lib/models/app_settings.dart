@@ -92,31 +92,41 @@ class AppSettings {
   final bool autoSaveEnabled;
   final int autoSaveMinutes;
   final WebDavConfig webDav;
+  final bool remoteSyncEnabled;
+  final int remoteSyncSeconds;
 
   const AppSettings({
     required this.themeMode,
     required this.autoSaveEnabled,
     required this.autoSaveMinutes,
     this.webDav = const WebDavConfig.empty(),
+    this.remoteSyncEnabled = true,
+    this.remoteSyncSeconds = 30,
   });
 
   const AppSettings.defaults()
       : themeMode = ThemeMode.system,
         autoSaveEnabled = true,
         autoSaveMinutes = 1,
-        webDav = const WebDavConfig.empty();
+        webDav = const WebDavConfig.empty(),
+        remoteSyncEnabled = true,
+        remoteSyncSeconds = 30;
 
   AppSettings copyWith({
     ThemeMode? themeMode,
     bool? autoSaveEnabled,
     int? autoSaveMinutes,
     WebDavConfig? webDav,
+    bool? remoteSyncEnabled,
+    int? remoteSyncSeconds,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
       autoSaveEnabled: autoSaveEnabled ?? this.autoSaveEnabled,
       autoSaveMinutes: autoSaveMinutes ?? this.autoSaveMinutes,
       webDav: webDav ?? this.webDav,
+      remoteSyncEnabled: remoteSyncEnabled ?? this.remoteSyncEnabled,
+      remoteSyncSeconds: remoteSyncSeconds ?? this.remoteSyncSeconds,
     );
   }
 
@@ -127,7 +137,9 @@ class AppSettings {
         other.themeMode == themeMode &&
         other.autoSaveEnabled == autoSaveEnabled &&
         other.autoSaveMinutes == autoSaveMinutes &&
-        other.webDav == webDav;
+        other.webDav == webDav &&
+        other.remoteSyncEnabled == remoteSyncEnabled &&
+        other.remoteSyncSeconds == remoteSyncSeconds;
   }
 
   @override
@@ -136,5 +148,7 @@ class AppSettings {
         autoSaveEnabled,
         autoSaveMinutes,
         webDav,
+        remoteSyncEnabled,
+        remoteSyncSeconds,
       );
 }

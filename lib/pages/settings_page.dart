@@ -25,6 +25,8 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _minutesController;
   late final FocusNode _minutesFocusNode;
+  late final TextEditingController _remoteSyncSecondsController;
+  late final FocusNode _remoteSyncSecondsFocusNode;
   late final TextEditingController _webDavUrlController;
   late final TextEditingController _webDavUsernameController;
   late final TextEditingController _webDavPasswordController;
@@ -41,6 +43,11 @@ class _SettingsPageState extends State<SettingsPage> {
       text: widget.settingsListenable.value.autoSaveMinutes.toString(),
     );
     _minutesFocusNode = FocusNode()..addListener(_onMinutesFocusChanged);
+    _remoteSyncSecondsController = TextEditingController(
+      text: widget.settingsListenable.value.remoteSyncSeconds.toString(),
+    );
+    _remoteSyncSecondsFocusNode = FocusNode()
+      ..addListener(_onRemoteSyncSecondsFocusChanged);
     final webDav = widget.settingsListenable.value.webDav;
     _webDavEnabled = webDav.enabled;
     _webDavUrlController = TextEditingController(text: webDav.serverUrl);
@@ -96,6 +103,31 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  void _onRemoteSyncSecondsFocusChanged() {
+    if (!_remoteSyncSecondsFocusNode.hasFocus) _commitRemoteSyncSeconds();
+  }
+
+  void _commitRemoteSyncSeconds() {
+    final value = int.tryParse(_remoteSyncSecondsController.text);
+    if (value == null) {
+      _remoteSyncSecondsController.text =
+          widget.settingsListenable.value.remoteSyncSeconds.toString();
+      return;
+    }
+
+    final normalized = SettingsService.normalizeRemoteSyncSeconds(value);
+    if (_remoteSyncSecondsController.text != normalized.toString()) {
+      _remoteSyncSecondsController.text = normalized.toString();
+      _remoteSyncSecondsController.selection = TextSelection.collapsed(
+        offset: _remoteSyncSecondsController.text.length,
+      );
+    }
+    final settings = widget.settingsListenable.value;
+    if (settings.remoteSyncSeconds != normalized) {
+      widget.onChanged(settings.copyWith(remoteSyncSeconds: normalized));
+    }
+  }
+
   WebDavConfig _draftWebDav() {
     return WebDavConfig(
       enabled: _webDavEnabled,
@@ -146,6 +178,8 @@ class _SettingsPageState extends State<SettingsPage> {
   void dispose() {
     _minutesFocusNode.dispose();
     _minutesController.dispose();
+    _remoteSyncSecondsFocusNode.dispose();
+    _remoteSyncSecondsController.dispose();
     _webDavUrlController.removeListener(_onWebDavDraftChanged);
     _webDavUsernameController.removeListener(_onWebDavDraftChanged);
     _webDavPasswordController.removeListener(_onWebDavDraftChanged);
@@ -165,6 +199,11 @@ class _SettingsPageState extends State<SettingsPage> {
         final minutes = settings.autoSaveMinutes.toString();
         if (!_minutesFocusNode.hasFocus && _minutesController.text != minutes) {
           _minutesController.text = minutes;
+        }
+        final remoteSyncSeconds = settings.remoteSyncSeconds.toString();
+        if (!_remoteSyncSecondsFocusNode.hasFocus &&
+            _remoteSyncSecondsController.text != remoteSyncSeconds) {
+          _remoteSyncSecondsController.text = remoteSyncSeconds;
         }
         if (!_webDavDraftDirty && _draftWebDav() != settings.webDav) {
           _syncWebDavDraft(settings.webDav);
@@ -228,6 +267,34 @@ class _SettingsPageState extends State<SettingsPage> {
                     onSubmitted: (_) => _commitMinutes(),
                   ),
                 ),
+              SwitchListTile(
+                title: const Text('云端实时更新'),
+                subtitle: const Text('仅对已打开且配置完整的 WebDAV 文件生效'),
+                value: settings.remoteSyncEnabled,
+                onChanged: (enabled) {
+                  widget.onChanged(
+                    settings.copyWith(remoteSyncEnabled: enabled),
+                  );
+                },
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  controller: _remoteSyncSecondsController,
+                  focusNode: _remoteSyncSecondsFocusNode,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(
+                    labelText: '检查间隔（秒）',
+                    suffixText: '秒',
+                    helperText: '有效范围：5～3600 秒',
+                  ),
+                  onChanged: (text) {
+                    if (text.isNotEmpty) _commitRemoteSyncSeconds();
+                  },
+                  onSubmitted: (_) => _commitRemoteSyncSeconds(),
+                ),
+              ),
               const SizedBox(height: 16),
               _buildSectionTitle(context, 'WebDAV 云同步'),
               SwitchListTile(

@@ -25,6 +25,10 @@ void main() {
     expect(find.text('跟随系统'), findsOneWidget);
     expect(find.text('自动保存'), findsOneWidget);
     expect(find.text('保存间隔（分钟）'), findsOneWidget);
+    expect(find.text('云端实时更新'), findsOneWidget);
+    expect(find.text('检查间隔（秒）'), findsOneWidget);
+    expect(find.text('有效范围：5～3600 秒'), findsOneWidget);
+    expect(find.text('30'), findsOneWidget);
   });
 
   testWidgets('updates theme, auto-save switch, and minute value',
@@ -84,6 +88,11 @@ void main() {
       ),
     );
 
+    await tester.drag(
+      find.byType(Scrollable).first,
+      const Offset(0, -500),
+    );
+    await tester.pump();
     expect(find.text('服务器地址'), findsOneWidget);
     final rootField = find.byWidgetPredicate(
       (widget) =>
@@ -128,6 +137,12 @@ void main() {
     );
     await tester.pump();
 
+    await tester.drag(
+      find.byType(Scrollable).first,
+      const Offset(0, -500),
+    );
+    await tester.pump();
+
     final webDavSwitch = tester.widget<SwitchListTile>(
       find.ancestor(
         of: find.text('启用 WebDAV'),
@@ -143,6 +158,38 @@ void main() {
       ),
     );
     expect(urlField.controller?.text, 'https://dav.example.com');
+  });
+
+  testWidgets('updates remote sync switch and interval', (tester) async {
+    final settings = ValueNotifier(const AppSettings.defaults());
+    addTearDown(settings.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SettingsPage(
+          settingsListenable: settings,
+          onChanged: (value) => settings.value = value,
+        ),
+      ),
+    );
+
+    final syncSwitch = find.ancestor(
+      of: find.text('云端实时更新'),
+      matching: find.byType(SwitchListTile),
+    );
+    await tester.tap(syncSwitch);
+    await tester.pump();
+    expect(settings.value.remoteSyncEnabled, isFalse);
+
+    final intervalField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.labelText == '检查间隔（秒）',
+    );
+    await tester.enterText(intervalField, '1');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pump();
+
+    expect(settings.value.remoteSyncSeconds, 5);
   });
 }
 

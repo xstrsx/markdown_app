@@ -17,6 +17,8 @@ class MarkdownFile {
   final int size;
   final MarkdownStorageType storageType;
   final String? remotePath;
+  final DateTime? remoteModified;
+  final int? remoteSize;
 
   MarkdownFile({
     required this.path,
@@ -28,6 +30,8 @@ class MarkdownFile {
     required this.size,
     this.storageType = MarkdownStorageType.local,
     this.remotePath,
+    this.remoteModified,
+    this.remoteSize,
   });
 
   factory MarkdownFile.fromFile(File file) {
@@ -56,6 +60,8 @@ class MarkdownFile {
     int? size,
     MarkdownStorageType? storageType,
     String? remotePath,
+    DateTime? remoteModified,
+    int? remoteSize,
   }) {
     return MarkdownFile(
       path: path ?? this.path,
@@ -67,6 +73,27 @@ class MarkdownFile {
       size: size ?? this.size,
       storageType: storageType ?? this.storageType,
       remotePath: remotePath ?? this.remotePath,
+      remoteModified: remoteModified ?? this.remoteModified,
+      remoteSize: remoteSize ?? this.remoteSize,
+    );
+  }
+
+  MarkdownFile withRemoteSnapshot({
+    DateTime? modified,
+    int? size,
+  }) {
+    return MarkdownFile(
+      path: path,
+      contentUri: contentUri,
+      contentPath: contentPath,
+      name: name,
+      content: content,
+      lastModified: lastModified,
+      size: this.size,
+      storageType: storageType,
+      remotePath: remotePath,
+      remoteModified: modified,
+      remoteSize: size,
     );
   }
 
@@ -80,6 +107,8 @@ class MarkdownFile {
       'size': size,
       'storageType': storageType.name,
       'remotePath': remotePath ?? '',
+      'remoteModified': remoteModified?.millisecondsSinceEpoch,
+      'remoteSize': remoteSize,
     };
   }
 
@@ -87,6 +116,7 @@ class MarkdownFile {
     final uri = json['contentUri'] as String?;
     final cp = json['contentPath'] as String?;
     final storageValue = json['storageType'] as String?;
+    final remoteModifiedValue = json['remoteModified'] as int?;
     return MarkdownFile(
       path: json['path'] as String,
       contentUri: (uri != null && uri.isNotEmpty) ? uri : null,
@@ -102,6 +132,10 @@ class MarkdownFile {
       remotePath: (json['remotePath'] as String?)?.isNotEmpty == true
           ? json['remotePath'] as String
           : null,
+      remoteModified: remoteModifiedValue == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(remoteModifiedValue),
+      remoteSize: json['remoteSize'] as int?,
     );
   }
 }

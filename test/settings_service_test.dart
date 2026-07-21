@@ -27,13 +27,15 @@ void main() {
 
   tearDown(SettingsService.resetDebugSharedPreferencesFactory);
 
-  test('defaults use system theme, enabled auto-save, and one minute', () {
+  test('defaults use system theme, enabled auto-save, and 30-second sync', () {
     expect(
         const AppSettings.defaults(),
         const AppSettings(
           themeMode: ThemeMode.system,
           autoSaveEnabled: true,
           autoSaveMinutes: 1,
+          remoteSyncEnabled: true,
+          remoteSyncSeconds: 30,
         ));
   });
 
@@ -59,6 +61,21 @@ void main() {
     expect((await SettingsService.load()).autoSaveMinutes, 1);
   });
 
+  test('loads and clamps remote sync settings', () async {
+    SharedPreferences.setMockInitialValues({
+      'settings_remote_sync_enabled': false,
+      'settings_remote_sync_seconds': 99999,
+    });
+
+    final settings = await SettingsService.load();
+
+    expect(settings.remoteSyncEnabled, isFalse);
+    expect(settings.remoteSyncSeconds, 3600);
+
+    await SettingsService.save(settings.copyWith(remoteSyncSeconds: 1));
+    expect((await SettingsService.load()).remoteSyncSeconds, 5);
+  });
+
   test('falls back to defaults for an invalid theme value', () async {
     SharedPreferences.setMockInitialValues({
       'settings_theme_mode': 'unknown',
@@ -74,6 +91,12 @@ void main() {
     expect(SettingsService.normalizeMinutes(1), 1);
     expect(SettingsService.normalizeMinutes(30), 30);
     expect(SettingsService.normalizeMinutes(99), 60);
+  });
+
+  test('normalizes remote sync seconds to the supported range', () {
+    expect(SettingsService.normalizeRemoteSyncSeconds(1), 5);
+    expect(SettingsService.normalizeRemoteSyncSeconds(30), 30);
+    expect(SettingsService.normalizeRemoteSyncSeconds(99999), 3600);
   });
 
   test('does not throw when saving preferences fails', () async {

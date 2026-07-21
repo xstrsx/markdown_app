@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../models/app_settings.dart';
 import '../models/markdown_file.dart';
+import '../models/webdav_entry.dart';
 import '../services/file_service.dart';
 import '../services/history_service.dart';
 import '../services/pdf_export_service.dart';
@@ -25,6 +26,37 @@ Duration? autoSaveDuration({required bool enabled, required int minutes}) {
   return Duration(minutes: SettingsService.normalizeMinutes(minutes));
 }
 
+Duration? remoteSyncDuration({
+  required bool enabled,
+  required bool webDavConfigured,
+  required int seconds,
+}) {
+  if (!enabled || !webDavConfigured) return null;
+  return Duration(
+    seconds: SettingsService.normalizeRemoteSyncSeconds(seconds),
+  );
+}
+
+bool remoteSnapshotChanged({
+  required DateTime? baselineModified,
+  required int? baselineSize,
+  required DateTime? remoteModified,
+  required int? remoteSize,
+}) {
+  if (baselineModified == null && baselineSize == null) return false;
+  return baselineModified != remoteModified || baselineSize != remoteSize;
+}
+
+bool remoteReloadConflict({
+  required bool localModified,
+  required String expectedContent,
+  required String currentContent,
+}) {
+  return localModified || expectedContent != currentContent;
+}
+
+enum CloudConflictResolution { keepLocal, loadRemote, cancel }
+
 class EditorPage extends StatefulWidget {
   final MarkdownFile? file;
   final String? initialFilePath;
@@ -36,6 +68,8 @@ class EditorPage extends StatefulWidget {
   final int autoSaveMinutes;
   final ValueListenable<AppSettings>? settingsListenable;
   final WebDavService Function(WebDavConfig config)? webDavServiceFactory;
+  final Future<String> Function(
+      String content, String name, String? identifier)? cacheContent;
 
   const EditorPage({
     super.key,
@@ -49,6 +83,7 @@ class EditorPage extends StatefulWidget {
     this.autoSaveMinutes = 1,
     this.settingsListenable,
     this.webDavServiceFactory,
+    this.cacheContent,
   });
 
   @override
@@ -68,10 +103,18 @@ class _EditorPageState extends State<EditorPage>
   bool _isModified = false;
   bool _isLoadingInitialFile = true;
   Timer? _autoSaveTimer;
+  Timer? _remoteSyncTimer;
   bool _isSaving = false;
+  bool _isCheckingRemote = false;
+  bool _remoteConflict = false;
   bool _isExportingPdf = false;
   late bool _autoSaveEnabled;
   late int _autoSaveMinutes;
+  late bool _remoteSyncEnabled;
+  late int _remoteSyncSeconds;
+  late WebDavConfig _webDavConfig;
+  DateTime? _remoteModified;
+  int? _remoteSize;
 
   @override
   void initState() {
@@ -86,6 +129,13 @@ class _EditorPageState extends State<EditorPage>
       widget.settingsListenable?.value.autoSaveMinutes ??
           widget.autoSaveMinutes,
     );
+    _remoteSyncEnabled =
+        widget.settingsListenable?.value.remoteSyncEnabled ?? true;
+    _remoteSyncSeconds = SettingsService.normalizeRemoteSyncSeconds(
+      widget.settingsListenable?.value.remoteSyncSeconds ?? 30,
+    );
+    _webDavConfig =
+        widget.settingsListenable?.value.webDav ?? const WebDavConfig.empty();
     widget.settingsListenable?.addListener(_onSettingsChanged);
     _loadInitialFile();
     _setupAutoSave();
@@ -95,7 +145,10 @@ class _EditorPageState extends State<EditorPage>
     final settings = widget.settingsListenable?.value;
     if (settings == null || !mounted) return;
     final changed = _autoSaveEnabled != settings.autoSaveEnabled ||
-        _autoSaveMinutes != settings.autoSaveMinutes;
+        _autoSaveMinutes != settings.autoSaveMinutes ||
+        _remoteSyncEnabled != settings.remoteSyncEnabled ||
+        _remoteSyncSeconds != settings.remoteSyncSeconds ||
+        _webDavConfig != settings.webDav;
     if (!changed) return;
 
     setState(() {
@@ -103,9 +156,15 @@ class _EditorPageState extends State<EditorPage>
       _autoSaveMinutes = SettingsService.normalizeMinutes(
         settings.autoSaveMinutes,
       );
+      _remoteSyncEnabled = settings.remoteSyncEnabled;
+      _remoteSyncSeconds = SettingsService.normalizeRemoteSyncSeconds(
+        settings.remoteSyncSeconds,
+      );
+      _webDavConfig = settings.webDav;
     });
     _autoSaveTimer?.cancel();
     if (_isModified) _scheduleAutoSave();
+    _restartRemoteSync();
   }
 
   Future<void> _loadInitialFile() async {
@@ -115,6 +174,8 @@ class _EditorPageState extends State<EditorPage>
         _currentFile = file;
         _contentUri = file.contentUri;
         _cachePath = file.contentPath;
+        _remoteModified = file.remoteModified;
+        _remoteSize = file.remoteSize;
 
         var content = file.content;
         if (content.isEmpty) {
@@ -128,6 +189,7 @@ class _EditorPageState extends State<EditorPage>
         _isModified = false;
         if (mounted) setState(() {});
         await HistoryService.addToHistory(file.copyWith(content: content));
+        _restartRemoteSync();
         if (widget.exportPdfOnOpen) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _exportPdf();
@@ -227,6 +289,241 @@ class _EditorPageState extends State<EditorPage>
     if (duration != null) _autoSaveTimer = Timer(duration, _autoSave);
   }
 
+  void _restartRemoteSync() {
+    _remoteSyncTimer?.cancel();
+    _remoteSyncTimer = null;
+
+    final file = _currentFile;
+    final settings = widget.settingsListenable?.value;
+    final config = settings?.webDav;
+    if (file == null ||
+        file.storageType != MarkdownStorageType.webDav ||
+        config == null) {
+      return;
+    }
+
+    final duration = remoteSyncDuration(
+      enabled: _remoteSyncEnabled,
+      webDavConfigured: config.isComplete,
+      seconds: _remoteSyncSeconds,
+    );
+    if (duration == null) return;
+
+    _remoteSyncTimer = Timer.periodic(duration, (_) {
+      unawaited(_checkRemoteChanges());
+    });
+  }
+
+  bool get _hasRemoteSnapshot => _remoteModified != null || _remoteSize != null;
+
+  Future<void> _checkRemoteChanges() async {
+    if (_isCheckingRemote ||
+        _isSaving ||
+        _remoteConflict ||
+        !mounted ||
+        _currentFile?.storageType != MarkdownStorageType.webDav) {
+      return;
+    }
+    final file = _currentFile;
+    final config = widget.settingsListenable?.value.webDav;
+    final remotePath = file?.remotePath;
+    if (file == null ||
+        config == null ||
+        !config.isComplete ||
+        remotePath == null) {
+      return;
+    }
+
+    _isCheckingRemote = true;
+    try {
+      final service =
+          widget.webDavServiceFactory?.call(config) ?? WebDavService(config);
+      final metadata = await service.getMetadata(remotePath);
+      if (!mounted || _currentFile?.remotePath != remotePath) return;
+
+      if (!_hasRemoteSnapshot) {
+        _applyRemoteSnapshot(metadata);
+        return;
+      }
+
+      final changed = metadata == null ||
+          remoteSnapshotChanged(
+            baselineModified: _remoteModified,
+            baselineSize: _remoteSize,
+            remoteModified: metadata.modified,
+            remoteSize: metadata.size,
+          );
+      if (!changed) return;
+
+      if (_isModified) {
+        await _resolveRemoteConflict(service, metadata);
+      } else if (metadata != null) {
+        await _reloadRemoteFile(
+          service,
+          metadata,
+          expectedContent: _textController.text,
+        );
+      } else {
+        _remoteConflict = true;
+        _autoSaveTimer?.cancel();
+        _showRemoteMessage('云端文件已不存在，已暂停自动同步');
+      }
+    } catch (error, stackTrace) {
+      debugPrint('检查云端文件更新失败: $error\n$stackTrace');
+      if (mounted) _showRemoteMessage('检查云端文件更新失败，请检查网络');
+    } finally {
+      _isCheckingRemote = false;
+    }
+  }
+
+  void _applyRemoteSnapshot(WebDavEntry? metadata) {
+    final file = _currentFile;
+    if (file == null) return;
+    _remoteModified = metadata?.modified;
+    _remoteSize = metadata?.size;
+    _currentFile = file.withRemoteSnapshot(
+      modified: _remoteModified,
+      size: _remoteSize,
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _reloadRemoteFile(
+    WebDavService service,
+    WebDavEntry metadata, {
+    String? expectedContent,
+    bool allowLocalOverwrite = false,
+  }) async {
+    final file = _currentFile;
+    final remotePath = file?.remotePath;
+    if (file == null || remotePath == null) return;
+
+    final contentBeforeReload = _textController.text;
+    if (!allowLocalOverwrite &&
+        expectedContent != null &&
+        remoteReloadConflict(
+          localModified: _isModified,
+          expectedContent: expectedContent,
+          currentContent: contentBeforeReload,
+        )) {
+      await _resolveRemoteConflict(service, metadata);
+      return;
+    }
+
+    final content = utf8.decode(await service.download(remotePath));
+    final contentPath = await _cacheContent(
+      content,
+      file.name,
+      'webdav:$remotePath',
+    );
+    if (!allowLocalOverwrite &&
+        remoteReloadConflict(
+          localModified: _isModified,
+          expectedContent: contentBeforeReload,
+          currentContent: _textController.text,
+        )) {
+      await _resolveRemoteConflict(service, metadata);
+      return;
+    }
+    final updatedFile = file
+        .copyWith(
+          content: content,
+          contentPath: contentPath,
+          lastModified: DateTime.now(),
+          size: content.length,
+        )
+        .withRemoteSnapshot(
+          modified: metadata.modified,
+          size: metadata.size,
+        );
+    _isLoadingInitialFile = true;
+    _textController.text = content;
+    _isLoadingInitialFile = false;
+    _remoteModified = metadata.modified;
+    _remoteSize = metadata.size;
+    _remoteConflict = false;
+    if (!mounted) return;
+    setState(() {
+      _currentFile = updatedFile;
+      _isModified = false;
+    });
+    await HistoryService.addToHistory(updatedFile);
+    _restartRemoteSync();
+  }
+
+  Future<void> _resolveRemoteConflict(
+    WebDavService service,
+    WebDavEntry? metadata,
+  ) async {
+    _remoteConflict = true;
+    _autoSaveTimer?.cancel();
+    final resolution = await showDialog<CloudConflictResolution>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('检测到云端文件已更新'),
+        content: const Text('其他设备已经修改了此文件，请选择如何处理当前修改。'),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.of(context).pop(CloudConflictResolution.cancel),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: metadata == null
+                ? null
+                : () => Navigator.of(context)
+                    .pop(CloudConflictResolution.loadRemote),
+            child: const Text('加载云端版本'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(context).pop(CloudConflictResolution.keepLocal),
+            child: const Text('保留本地并覆盖'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    switch (resolution) {
+      case CloudConflictResolution.keepLocal:
+        _remoteConflict = false;
+        await _saveCloudFile(forceRemoteOverwrite: true);
+      case CloudConflictResolution.loadRemote:
+        if (metadata == null) return;
+        try {
+          await _reloadRemoteFile(
+            service,
+            metadata,
+            allowLocalOverwrite: true,
+          );
+        } catch (error, stackTrace) {
+          debugPrint('加载冲突云端版本失败: $error\n$stackTrace');
+          if (mounted) _showRemoteMessage('加载云端版本失败，请稍后重试');
+        }
+      case CloudConflictResolution.cancel:
+      case null:
+        break;
+    }
+  }
+
+  void _showRemoteMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<String> _cacheContent(
+    String content,
+    String name,
+    String? identifier,
+  ) {
+    return widget.cacheContent?.call(content, name, identifier) ??
+        FileService.cacheContent(content, name, identifier);
+  }
+
   Future<void> _autoSave() async {
     if (_currentFile != null && _isModified) await _saveFile();
   }
@@ -288,7 +585,7 @@ class _EditorPageState extends State<EditorPage>
     if (mounted) setState(() => _isSaving = false);
   }
 
-  Future<void> _saveCloudFile() async {
+  Future<void> _saveCloudFile({bool forceRemoteOverwrite = false}) async {
     final file = _currentFile;
     final remotePath = file?.remotePath;
     final config = widget.settingsListenable?.value.webDav;
@@ -309,7 +606,32 @@ class _EditorPageState extends State<EditorPage>
     try {
       final service =
           widget.webDavServiceFactory?.call(config) ?? WebDavService(config);
-      await service.upload(remotePath, utf8.encode(contentToSave));
+      if (!forceRemoteOverwrite && _hasRemoteSnapshot) {
+        final metadata = await service.getMetadata(remotePath);
+        final changed = metadata == null ||
+            remoteSnapshotChanged(
+              baselineModified: _remoteModified,
+              baselineSize: _remoteSize,
+              remoteModified: metadata.modified,
+              remoteSize: metadata.size,
+            );
+        if (changed) {
+          await _resolveRemoteConflict(service, metadata);
+          return;
+        }
+      }
+
+      final bytes = utf8.encode(contentToSave);
+      await service.upload(remotePath, bytes);
+      WebDavEntry? metadata;
+      try {
+        metadata = await service.getMetadata(remotePath);
+      } catch (error, stackTrace) {
+        debugPrint('读取保存后的云端文件信息失败: $error\n$stackTrace');
+      }
+      final snapshotModified =
+          metadata?.modified ?? file.remoteModified ?? DateTime.now();
+      final snapshotSize = metadata?.size ?? file.remoteSize ?? bytes.length;
       final contentPath = await FileService.cacheContent(
         contentToSave,
         file.name,
@@ -319,13 +641,21 @@ class _EditorPageState extends State<EditorPage>
         contentToSave,
         _textController.text,
       );
-      final updatedFile = file.copyWith(
-        content: contentToSave,
-        contentPath: contentPath,
-        lastModified: DateTime.now(),
-        size: contentToSave.length,
-      );
+      final updatedFile = file
+          .copyWith(
+            content: contentToSave,
+            contentPath: contentPath,
+            lastModified: DateTime.now(),
+            size: contentToSave.length,
+          )
+          .withRemoteSnapshot(
+            modified: snapshotModified,
+            size: snapshotSize,
+          );
       if (!mounted) return;
+      _remoteModified = snapshotModified;
+      _remoteSize = snapshotSize;
+      _remoteConflict = false;
       setState(() {
         _currentFile = updatedFile;
         _isModified = hasPendingChanges;
@@ -639,6 +969,7 @@ class _EditorPageState extends State<EditorPage>
   @override
   void dispose() {
     _autoSaveTimer?.cancel();
+    _remoteSyncTimer?.cancel();
     widget.settingsListenable?.removeListener(_onSettingsChanged);
     _textController.dispose();
     _tabController.dispose();

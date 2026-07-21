@@ -67,6 +67,17 @@ class WebDavService {
     return _run('下载远程文件', () => _gateway.readFile(normalized));
   }
 
+  Future<WebDavEntry?> getMetadata(String path) async {
+    final normalized = normalizePath(path);
+    final parent = _parentPath(normalized);
+    final entries = await listDirectory(parent);
+    for (final entry in entries) {
+      if (entry.isDirectory) continue;
+      if (normalizePath(entry.path) == normalized) return entry;
+    }
+    return null;
+  }
+
   Future<void> upload(String path, List<int> bytes) async {
     final normalized = normalizePath(path);
     await _run(
@@ -110,6 +121,11 @@ class WebDavService {
       parts.add(part);
     }
     return parts.isEmpty ? '/' : '/${parts.join('/')}';
+  }
+
+  static String _parentPath(String path) {
+    final separator = path.lastIndexOf('/');
+    return separator <= 0 ? '/' : path.substring(0, separator);
   }
 
   Future<T> _run<T>(String operation, Future<T> Function() action) async {

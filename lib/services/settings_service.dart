@@ -13,6 +13,8 @@ class SettingsService {
   static const _webDavUsernameKey = 'settings_webdav_username';
   static const _webDavRootPathKey = 'settings_webdav_root_path';
   static const _webDavPasswordKey = 'settings_webdav_password';
+  static const _remoteSyncEnabledKey = 'settings_remote_sync_enabled';
+  static const _remoteSyncSecondsKey = 'settings_remote_sync_seconds';
 
   @visibleForTesting
   static Future<SharedPreferences> Function()? debugSharedPreferencesFactory;
@@ -55,6 +57,11 @@ class SettingsService {
           prefs.getInt(_autoSaveMinutesKey) ?? defaults.autoSaveMinutes,
         ),
         webDav: webDavWithoutPassword.copyWith(password: password),
+        remoteSyncEnabled:
+            prefs.getBool(_remoteSyncEnabledKey) ?? defaults.remoteSyncEnabled,
+        remoteSyncSeconds: normalizeRemoteSyncSeconds(
+          prefs.getInt(_remoteSyncSecondsKey) ?? defaults.remoteSyncSeconds,
+        ),
       );
     } catch (error, stackTrace) {
       debugPrint('读取应用设置失败: $error\n$stackTrace');
@@ -65,6 +72,7 @@ class SettingsService {
   static Future<void> save(AppSettings settings) async {
     final normalized = settings.copyWith(
       autoSaveMinutes: normalizeMinutes(settings.autoSaveMinutes),
+      remoteSyncSeconds: normalizeRemoteSyncSeconds(settings.remoteSyncSeconds),
     );
 
     try {
@@ -81,11 +89,25 @@ class SettingsService {
         _autoSaveMinutesKey,
         normalized.autoSaveMinutes,
       );
+      final remoteSyncEnabledSaved = await prefs.setBool(
+        _remoteSyncEnabledKey,
+        normalized.remoteSyncEnabled,
+      );
+      final remoteSyncSecondsSaved = await prefs.setInt(
+        _remoteSyncSecondsKey,
+        normalized.remoteSyncSeconds,
+      );
 
-      if (!themeSaved || !autoSaveEnabledSaved || !minutesSaved) {
+      if (!themeSaved ||
+          !autoSaveEnabledSaved ||
+          !minutesSaved ||
+          !remoteSyncEnabledSaved ||
+          !remoteSyncSecondsSaved) {
         debugPrint(
           '保存应用设置失败: theme=$themeSaved, '
-          'autoSaveEnabled=$autoSaveEnabledSaved, minutes=$minutesSaved',
+          'autoSaveEnabled=$autoSaveEnabledSaved, minutes=$minutesSaved, '
+          'remoteSyncEnabled=$remoteSyncEnabledSaved, '
+          'remoteSyncSeconds=$remoteSyncSecondsSaved',
         );
       }
       if (_hasWebDavConfiguration(normalized.webDav)) {
@@ -113,6 +135,9 @@ class SettingsService {
   }
 
   static int normalizeMinutes(int value) => value.clamp(1, 60).toInt();
+
+  static int normalizeRemoteSyncSeconds(int value) =>
+      value.clamp(5, 3600).toInt();
 
   static Future<SharedPreferences> _getSharedPreferences() {
     return debugSharedPreferencesFactory?.call() ??
