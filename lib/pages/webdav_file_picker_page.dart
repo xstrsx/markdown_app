@@ -7,12 +7,14 @@ class WebDavFilePickerPage extends StatefulWidget {
   final WebDavService service;
   final bool saveMode;
   final String? initialDirectory;
+  final String initialFileName;
 
   const WebDavFilePickerPage({
     super.key,
     required this.service,
     required this.saveMode,
     this.initialDirectory,
+    this.initialFileName = '未命名.md',
   });
 
   @override
@@ -32,7 +34,7 @@ class _WebDavFilePickerPageState extends State<WebDavFilePickerPage> {
     _directory = widget.service.normalizePath(
       widget.initialDirectory ?? widget.service.rootPath,
     );
-    _fileNameController = TextEditingController(text: '未命名.md');
+    _fileNameController = TextEditingController(text: widget.initialFileName);
     _loadDirectory();
   }
 

@@ -127,6 +127,7 @@ class _EditorPageState extends State<EditorPage>
         _textController.text = content;
         _isModified = false;
         if (mounted) setState(() {});
+        await HistoryService.addToHistory(file.copyWith(content: content));
         if (widget.exportPdfOnOpen) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _exportPdf();
@@ -416,6 +417,7 @@ class _EditorPageState extends State<EditorPage>
           saveMode: true,
           initialDirectory:
               currentPath == null ? null : _parentRemotePath(currentPath),
+          initialFileName: _currentFile?.name ?? '未命名.md',
         ),
       ),
     );

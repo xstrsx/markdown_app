@@ -100,4 +100,23 @@ void main() {
 
     expect(find.text('文件名不能包含路径分隔符或上级目录'), findsOneWidget);
   });
+
+  testWidgets('save mode uses the current file name by default',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WebDavFilePickerPage(
+          service: pickerService(),
+          saveMode: true,
+          initialFileName: '当前文档.md',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller?.text,
+      '当前文档.md',
+    );
+  });
 }
