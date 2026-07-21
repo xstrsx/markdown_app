@@ -1,17 +1,24 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../models/app_settings.dart';
 import '../models/markdown_file.dart';
 import '../services/file_service.dart';
 import '../services/history_service.dart';
+import '../services/webdav_service.dart';
+import 'webdav_file_picker_page.dart';
+import '../widgets/storage_choice_dialog.dart';
 import 'editor_page.dart';
 
 class HomePage extends StatefulWidget {
   final ValueListenable<AppSettings> settingsListenable;
+  final WebDavService Function(WebDavConfig config) webDavServiceFactory;
 
   const HomePage({
     super.key,
     required this.settingsListenable,
+    required this.webDavServiceFactory,
   });
 
   @override
@@ -43,6 +50,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _createNewFile() async {
+    final storage = await _chooseStorage();
+    if (!mounted) return;
+    if (storage == null && widget.settingsListenable.value.webDav.isComplete) {
+      return;
+    }
+    if (storage == FileStorageChoice.webDav) {
+      await _createCloudFile();
+      return;
+    }
+
     final fileNameController = TextEditingController(text: '未命名.md');
 
     final result = await showDialog<String>(
@@ -82,6 +99,7 @@ class _HomePageState extends State<HomePage> {
                 builder: (context) => EditorPage(
                   initialFilePath: filePath,
                   settingsListenable: widget.settingsListenable,
+                  webDavServiceFactory: widget.webDavServiceFactory,
                 ),
               ),
             )
@@ -91,6 +109,15 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openFile() async {
+    final storage = await _chooseStorage();
+    if (storage == null && widget.settingsListenable.value.webDav.isComplete) {
+      return;
+    }
+    if (storage == FileStorageChoice.webDav) {
+      await _openCloudFile();
+      return;
+    }
+
     final result = await FileService.pickMarkdownFile();
 
     if (result != null && mounted) {
@@ -103,6 +130,7 @@ class _HomePageState extends State<HomePage> {
                 initialContentUri: result.contentUri,
                 initialName: result.name,
                 settingsListenable: widget.settingsListenable,
+                webDavServiceFactory: widget.webDavServiceFactory,
               ),
             ),
           )
@@ -117,10 +145,112 @@ class _HomePageState extends State<HomePage> {
             builder: (context) => EditorPage(
               file: file,
               settingsListenable: widget.settingsListenable,
+              webDavServiceFactory: widget.webDavServiceFactory,
             ),
           ),
         )
         .then((_) => _loadRecentFiles());
+  }
+
+  Future<FileStorageChoice?> _chooseStorage() {
+    if (!widget.settingsListenable.value.webDav.isComplete) {
+      return Future.value(FileStorageChoice.local);
+    }
+    return showStorageChoiceDialog(context);
+  }
+
+  WebDavService _webDavService() {
+    return widget.webDavServiceFactory(
+      widget.settingsListenable.value.webDav,
+    );
+  }
+
+  Future<void> _createCloudFile() async {
+    final path = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (context) => WebDavFilePickerPage(
+          service: _webDavService(),
+          saveMode: true,
+        ),
+      ),
+    );
+    if (path == null || !mounted) return;
+    final file = MarkdownFile(
+      path: path,
+      remotePath: path,
+      storageType: MarkdownStorageType.webDav,
+      name: _fileName(path),
+      content: '',
+      lastModified: DateTime.now(),
+      size: 0,
+    );
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (context) => EditorPage(
+              file: file,
+              settingsListenable: widget.settingsListenable,
+              webDavServiceFactory: widget.webDavServiceFactory,
+            ),
+          ),
+        )
+        .then((_) => _loadRecentFiles());
+  }
+
+  Future<void> _openCloudFile() async {
+    try {
+      final service = _webDavService();
+      final path = await Navigator.of(context).push<String>(
+        MaterialPageRoute(
+          builder: (context) => WebDavFilePickerPage(
+            service: service,
+            saveMode: false,
+          ),
+        ),
+      );
+      if (path == null || !mounted) return;
+      final content = utf8.decode(await service.download(path));
+      final contentPath = await FileService.cacheContent(
+        content,
+        _fileName(path),
+        'webdav:$path',
+      );
+      final file = MarkdownFile(
+        path: path,
+        remotePath: path,
+        storageType: MarkdownStorageType.webDav,
+        contentPath: contentPath,
+        name: _fileName(path),
+        content: content,
+        lastModified: DateTime.now(),
+        size: content.length,
+      );
+      if (!mounted) return;
+      Navigator.of(context)
+          .push(
+            MaterialPageRoute(
+              builder: (context) => EditorPage(
+                file: file,
+                settingsListenable: widget.settingsListenable,
+                webDavServiceFactory: widget.webDavServiceFactory,
+              ),
+            ),
+          )
+          .then((_) => _loadRecentFiles());
+    } catch (error, stackTrace) {
+      debugPrint('打开云端 Markdown 文件失败: $error\n$stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('打开云端文件失败，请检查网络和配置')),
+        );
+      }
+    }
+  }
+
+  String _fileName(String path) {
+    final clean =
+        path.endsWith('/') ? path.substring(0, path.length - 1) : path;
+    return clean.split('/').last;
   }
 
   @override

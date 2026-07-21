@@ -8,6 +8,7 @@ import 'pages/home_page.dart';
 import 'pages/history_page.dart';
 import 'pages/settings_page.dart';
 import 'services/settings_service.dart';
+import 'services/webdav_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -54,6 +55,7 @@ class _MyAppState extends State<MyApp> {
     _mainScreen = MainScreen(
       settingsListenable: _settingsNotifier,
       onSettingsChanged: _updateSettings,
+      webDavServiceFactory: (config) => WebDavService(config),
     );
     _loadSettings();
   }
@@ -107,11 +109,13 @@ class _MyAppState extends State<MyApp> {
 class MainScreen extends StatefulWidget {
   final ValueListenable<AppSettings> settingsListenable;
   final ValueChanged<AppSettings> onSettingsChanged;
+  final WebDavService Function(WebDavConfig config) webDavServiceFactory;
 
   const MainScreen({
     super.key,
     required this.settingsListenable,
     required this.onSettingsChanged,
+    required this.webDavServiceFactory,
   });
 
   @override
@@ -126,11 +130,18 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     _pages = [
-      HomePage(settingsListenable: widget.settingsListenable),
-      HistoryPage(settingsListenable: widget.settingsListenable),
+      HomePage(
+        settingsListenable: widget.settingsListenable,
+        webDavServiceFactory: widget.webDavServiceFactory,
+      ),
+      HistoryPage(
+        settingsListenable: widget.settingsListenable,
+        webDavServiceFactory: widget.webDavServiceFactory,
+      ),
       SettingsPage(
         settingsListenable: widget.settingsListenable,
         onChanged: widget.onSettingsChanged,
+        serviceFactory: widget.webDavServiceFactory,
       ),
     ];
   }

@@ -33,8 +33,7 @@ class HistoryService {
   static Future<void> addToHistory(MarkdownFile file) async {
     final history = await getHistory();
 
-    // Remove existing entry with same path
-    history.removeWhere((f) => f.path == file.path);
+    history.removeWhere((f) => historyKey(f) == historyKey(file));
 
     // Add to beginning
     history.insert(0, file);
@@ -49,8 +48,22 @@ class HistoryService {
 
   static Future<void> removeFromHistory(String path) async {
     final history = await getHistory();
-    history.removeWhere((f) => f.path == path);
+    history.removeWhere(
+      (f) => f.path == path || f.remotePath == path,
+    );
     await _saveHistory(history);
+  }
+
+  static Future<void> removeFile(MarkdownFile file) async {
+    final history = await getHistory();
+    history.removeWhere((entry) => historyKey(entry) == historyKey(file));
+    await _saveHistory(history);
+  }
+
+  static String historyKey(MarkdownFile file) {
+    return file.storageType == MarkdownStorageType.webDav
+        ? 'webdav:${file.remotePath ?? file.path}'
+        : 'local:${file.path}';
   }
 
   static Future<void> clearHistory() async {

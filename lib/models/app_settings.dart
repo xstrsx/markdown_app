@@ -1,30 +1,102 @@
 import 'package:flutter/material.dart';
 
+class WebDavConfig {
+  final bool enabled;
+  final String serverUrl;
+  final String username;
+  final String rootPath;
+  final String password;
+
+  const WebDavConfig({
+    required this.enabled,
+    required this.serverUrl,
+    required this.username,
+    required this.rootPath,
+    required this.password,
+  });
+
+  const WebDavConfig.empty()
+      : enabled = false,
+        serverUrl = '',
+        username = '',
+        rootPath = '/',
+        password = '';
+
+  bool get isComplete {
+    final uri = Uri.tryParse(serverUrl.trim());
+    return enabled &&
+        uri != null &&
+        (uri.scheme == 'http' || uri.scheme == 'https') &&
+        rootPath.trim().startsWith('/');
+  }
+
+  WebDavConfig copyWith({
+    bool? enabled,
+    String? serverUrl,
+    String? username,
+    String? rootPath,
+    String? password,
+  }) {
+    return WebDavConfig(
+      enabled: enabled ?? this.enabled,
+      serverUrl: serverUrl ?? this.serverUrl,
+      username: username ?? this.username,
+      rootPath: rootPath ?? this.rootPath,
+      password: password ?? this.password,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is WebDavConfig &&
+        other.enabled == enabled &&
+        other.serverUrl == serverUrl &&
+        other.username == username &&
+        other.rootPath == rootPath &&
+        other.password == password;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        enabled,
+        serverUrl,
+        username,
+        rootPath,
+        password,
+      );
+}
+
 class AppSettings {
   final ThemeMode themeMode;
   final bool autoSaveEnabled;
   final int autoSaveMinutes;
+  final WebDavConfig webDav;
 
   const AppSettings({
     required this.themeMode,
     required this.autoSaveEnabled,
     required this.autoSaveMinutes,
+    this.webDav = const WebDavConfig.empty(),
   });
 
   const AppSettings.defaults()
       : themeMode = ThemeMode.system,
         autoSaveEnabled = true,
-        autoSaveMinutes = 1;
+        autoSaveMinutes = 1,
+        webDav = const WebDavConfig.empty();
 
   AppSettings copyWith({
     ThemeMode? themeMode,
     bool? autoSaveEnabled,
     int? autoSaveMinutes,
+    WebDavConfig? webDav,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
       autoSaveEnabled: autoSaveEnabled ?? this.autoSaveEnabled,
       autoSaveMinutes: autoSaveMinutes ?? this.autoSaveMinutes,
+      webDav: webDav ?? this.webDav,
     );
   }
 
@@ -34,9 +106,15 @@ class AppSettings {
     return other is AppSettings &&
         other.themeMode == themeMode &&
         other.autoSaveEnabled == autoSaveEnabled &&
-        other.autoSaveMinutes == autoSaveMinutes;
+        other.autoSaveMinutes == autoSaveMinutes &&
+        other.webDav == webDav;
   }
 
   @override
-  int get hashCode => Object.hash(themeMode, autoSaveEnabled, autoSaveMinutes);
+  int get hashCode => Object.hash(
+        themeMode,
+        autoSaveEnabled,
+        autoSaveMinutes,
+        webDav,
+      );
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -10,8 +11,11 @@ import '../services/file_service.dart';
 import '../services/history_service.dart';
 import '../services/pdf_export_service.dart';
 import '../services/settings_service.dart';
+import '../services/webdav_service.dart';
 import '../widgets/editor_toolbar.dart';
 import '../widgets/markdown_preview.dart';
+import '../widgets/storage_choice_dialog.dart';
+import 'webdav_file_picker_page.dart';
 
 bool contentChangedSinceSave(String savedContent, String currentContent) =>
     savedContent != currentContent;
@@ -31,6 +35,7 @@ class EditorPage extends StatefulWidget {
   final bool autoSaveEnabled;
   final int autoSaveMinutes;
   final ValueListenable<AppSettings>? settingsListenable;
+  final WebDavService Function(WebDavConfig config)? webDavServiceFactory;
 
   const EditorPage({
     super.key,
@@ -43,6 +48,7 @@ class EditorPage extends StatefulWidget {
     this.autoSaveEnabled = true,
     this.autoSaveMinutes = 1,
     this.settingsListenable,
+    this.webDavServiceFactory,
   });
 
   @override
@@ -229,6 +235,10 @@ class _EditorPageState extends State<EditorPage>
       await _saveAs();
       return;
     }
+    if (_currentFile!.storageType == MarkdownStorageType.webDav) {
+      await _saveCloudFile();
+      return;
+    }
     setState(() => _isSaving = true);
 
     final contentToSave = _textController.text;
@@ -277,6 +287,67 @@ class _EditorPageState extends State<EditorPage>
     if (mounted) setState(() => _isSaving = false);
   }
 
+  Future<void> _saveCloudFile() async {
+    final file = _currentFile;
+    final remotePath = file?.remotePath;
+    final config = widget.settingsListenable?.value.webDav;
+    if (file == null ||
+        remotePath == null ||
+        config == null ||
+        !config.isComplete) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('WebDAV 配置不可用，无法保存云端文件')),
+        );
+      }
+      return;
+    }
+
+    if (mounted) setState(() => _isSaving = true);
+    final contentToSave = _textController.text;
+    try {
+      final service =
+          widget.webDavServiceFactory?.call(config) ?? WebDavService(config);
+      await service.upload(remotePath, utf8.encode(contentToSave));
+      final contentPath = await FileService.cacheContent(
+        contentToSave,
+        file.name,
+        'webdav:$remotePath',
+      );
+      final hasPendingChanges = contentChangedSinceSave(
+        contentToSave,
+        _textController.text,
+      );
+      final updatedFile = file.copyWith(
+        content: contentToSave,
+        contentPath: contentPath,
+        lastModified: DateTime.now(),
+        size: contentToSave.length,
+      );
+      if (!mounted) return;
+      setState(() {
+        _currentFile = updatedFile;
+        _isModified = hasPendingChanges;
+      });
+      await HistoryService.addToHistory(updatedFile);
+      if (hasPendingChanges && mounted) _scheduleAutoSave();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已保存到云端：${file.name}')),
+        );
+      }
+    } catch (error, stackTrace) {
+      debugPrint('保存云端 Markdown 文件失败: $error\n$stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('云端保存失败，请检查网络和配置')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
   String _getWritablePath() {
     if (_currentFile != null) {
       final p = _currentFile!.path;
@@ -287,6 +358,16 @@ class _EditorPageState extends State<EditorPage>
   }
 
   Future<void> _saveAs() async {
+    final settings = widget.settingsListenable?.value;
+    if (settings?.webDav.isComplete == true) {
+      final choice = await showStorageChoiceDialog(context);
+      if (choice == null) return;
+      if (choice == FileStorageChoice.webDav) {
+        await _saveAsCloud();
+        return;
+      }
+    }
+
     final defaultName = _currentFile?.name ?? '未命名.md';
     final result = await FileService.getSavePath(
       defaultName: defaultName,
@@ -320,6 +401,79 @@ class _EditorPageState extends State<EditorPage>
         );
       }
     }
+  }
+
+  Future<void> _saveAsCloud() async {
+    final config = widget.settingsListenable?.value.webDav;
+    if (config == null || !config.isComplete) return;
+    final service =
+        widget.webDavServiceFactory?.call(config) ?? WebDavService(config);
+    final currentPath = _currentFile?.remotePath;
+    final selectedPath = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (context) => WebDavFilePickerPage(
+          service: service,
+          saveMode: true,
+          initialDirectory:
+              currentPath == null ? null : _parentRemotePath(currentPath),
+        ),
+      ),
+    );
+    if (selectedPath == null) return;
+
+    final content = _textController.text;
+    try {
+      await service.upload(selectedPath, utf8.encode(content));
+      final name = _remoteName(selectedPath);
+      final contentPath = await FileService.cacheContent(
+        content,
+        name,
+        'webdav:$selectedPath',
+      );
+      final file = MarkdownFile(
+        path: selectedPath,
+        remotePath: selectedPath,
+        storageType: MarkdownStorageType.webDav,
+        contentPath: contentPath,
+        name: name,
+        content: content,
+        lastModified: DateTime.now(),
+        size: content.length,
+      );
+      if (!mounted) return;
+      setState(() {
+        _currentFile = file;
+        _contentUri = null;
+        _cachePath = null;
+        _isModified = false;
+      });
+      await HistoryService.addToHistory(file);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已另存到云端：$name')),
+        );
+      }
+    } catch (error, stackTrace) {
+      debugPrint('云端另存为失败: $error\n$stackTrace');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('云端另存为失败，请检查网络和配置')),
+        );
+      }
+    }
+  }
+
+  String _parentRemotePath(String path) {
+    final clean =
+        path.endsWith('/') ? path.substring(0, path.length - 1) : path;
+    final slash = clean.lastIndexOf('/');
+    return slash <= 0 ? '/' : clean.substring(0, slash);
+  }
+
+  String _remoteName(String path) {
+    final clean =
+        path.endsWith('/') ? path.substring(0, path.length - 1) : path;
+    return clean.split('/').last;
   }
 
   Future<void> _exportPdf() async {

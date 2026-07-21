@@ -9,14 +9,17 @@ import '../services/history_service.dart';
 import '../services/pdf_export_service.dart';
 import '../export/export_docx.dart';
 import '../export/export_html.dart';
+import '../services/webdav_service.dart';
 import 'editor_page.dart';
 
 class HistoryPage extends StatefulWidget {
   final ValueListenable<AppSettings> settingsListenable;
+  final WebDavService Function(WebDavConfig config) webDavServiceFactory;
 
   const HistoryPage({
     super.key,
     required this.settingsListenable,
+    required this.webDavServiceFactory,
   });
 
   @override
@@ -51,16 +54,59 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   void _openFile(MarkdownFile file) {
+    if (file.storageType == MarkdownStorageType.webDav) {
+      _openCloudFile(file);
+      return;
+    }
     Navigator.of(context)
         .push(
           MaterialPageRoute(
             builder: (context) => EditorPage(
               file: file,
               settingsListenable: widget.settingsListenable,
+              webDavServiceFactory: widget.webDavServiceFactory,
             ),
           ),
         )
         .then((_) => _loadHistory());
+  }
+
+  Future<void> _openCloudFile(MarkdownFile file) async {
+    final config = widget.settingsListenable.value.webDav;
+    if (!config.isComplete || file.remotePath == null) {
+      _showExportMessage('WebDAV 配置不可用，无法打开云端历史文件');
+      return;
+    }
+    try {
+      final service = widget.webDavServiceFactory(config);
+      final content = utf8.decode(await service.download(file.remotePath!));
+      final contentPath = await FileService.cacheContent(
+        content,
+        file.name,
+        'webdav:${file.remotePath}',
+      );
+      final updatedFile = file.copyWith(
+        content: content,
+        contentPath: contentPath,
+        lastModified: DateTime.now(),
+        size: content.length,
+      );
+      if (!mounted) return;
+      Navigator.of(context)
+          .push(
+            MaterialPageRoute(
+              builder: (context) => EditorPage(
+                file: updatedFile,
+                settingsListenable: widget.settingsListenable,
+                webDavServiceFactory: widget.webDavServiceFactory,
+              ),
+            ),
+          )
+          .then((_) => _loadHistory());
+    } catch (error, stackTrace) {
+      debugPrint('打开历史云端文件失败: $error\n$stackTrace');
+      if (mounted) _showExportMessage('打开云端历史文件失败，请检查网络和配置');
+    }
   }
 
   Future<void> _exportPdf(MarkdownFile file) async {
@@ -325,7 +371,7 @@ class _HistoryPageState extends State<HistoryPage> {
     );
 
     if (confirm == true) {
-      await HistoryService.removeFromHistory(file.path);
+      await HistoryService.removeFile(file);
       if (!mounted) return;
       await _loadHistory();
     }
@@ -364,7 +410,7 @@ class _HistoryPageState extends State<HistoryPage> {
 
     if (result.isSuccess) {
       final cacheDeleted = await FileService.deleteCachedContent(file);
-      await HistoryService.removeFromHistory(file.path);
+      await HistoryService.removeFile(file);
       if (!mounted) return;
       await _loadHistory();
       if (!mounted) return;
@@ -438,15 +484,16 @@ class _HistoryPageState extends State<HistoryPage> {
                 _exportHtml(file);
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.folder),
-              title: const Text('打开文件所在位置'),
-              onTap: () {
-                Navigator.of(context).pop();
-                FileService.openFileLocation(file.path,
-                    contentUri: file.contentUri);
-              },
-            ),
+            if (file.storageType == MarkdownStorageType.local)
+              ListTile(
+                leading: const Icon(Icons.folder),
+                title: const Text('打开文件所在位置'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  FileService.openFileLocation(file.path,
+                      contentUri: file.contentUri);
+                },
+              ),
             const Divider(),
             ListTile(
               leading: Icon(
@@ -462,20 +509,21 @@ class _HistoryPageState extends State<HistoryPage> {
                 _deleteHistory(file);
               },
             ),
-            ListTile(
-              leading: Icon(
-                Icons.delete_forever,
-                color: Theme.of(context).colorScheme.error,
+            if (file.storageType == MarkdownStorageType.local)
+              ListTile(
+                leading: Icon(
+                  Icons.delete_forever,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                title: Text(
+                  '删除原文件',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _deleteOriginalFile(file);
+                },
               ),
-              title: Text(
-                '删除原文件',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-              onTap: () {
-                Navigator.of(context).pop();
-                _deleteOriginalFile(file);
-              },
-            ),
           ],
         ),
       ),
