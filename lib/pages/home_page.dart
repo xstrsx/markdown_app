@@ -1,11 +1,18 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../models/app_settings.dart';
 import '../models/markdown_file.dart';
 import '../services/file_service.dart';
 import '../services/history_service.dart';
 import 'editor_page.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final ValueListenable<AppSettings> settingsListenable;
+
+  const HomePage({
+    super.key,
+    required this.settingsListenable,
+  });
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -72,7 +79,10 @@ class _HomePageState extends State<HomePage> {
         Navigator.of(context)
             .push(
               MaterialPageRoute(
-                builder: (context) => EditorPage(initialFilePath: filePath),
+                builder: (context) => EditorPage(
+                  initialFilePath: filePath,
+                  settingsListenable: widget.settingsListenable,
+                ),
               ),
             )
             .then((_) => _loadRecentFiles());
@@ -92,6 +102,7 @@ class _HomePageState extends State<HomePage> {
                 initialDisplayPath: result.displayPath,
                 initialContentUri: result.contentUri,
                 initialName: result.name,
+                settingsListenable: widget.settingsListenable,
               ),
             ),
           )
@@ -103,7 +114,10 @@ class _HomePageState extends State<HomePage> {
     Navigator.of(context)
         .push(
           MaterialPageRoute(
-            builder: (context) => EditorPage(file: file),
+            builder: (context) => EditorPage(
+              file: file,
+              settingsListenable: widget.settingsListenable,
+            ),
           ),
         )
         .then((_) => _loadRecentFiles());

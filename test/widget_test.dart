@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -8,7 +9,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('App renders main screen with title and action buttons', (WidgetTester tester) async {
+  testWidgets('App renders main screen with title and action buttons',
+      (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
     await tester.pump();
 
@@ -26,7 +28,8 @@ void main() {
     expect(find.text('历史'), findsWidgets);
   });
 
-  testWidgets('Navigation switches between Home and History pages', (WidgetTester tester) async {
+  testWidgets('Navigation switches between Home and History pages',
+      (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
     await tester.pump();
 
@@ -50,7 +53,29 @@ void main() {
     expect(find.text('MD 编辑器'), findsOneWidget);
   });
 
-  testWidgets('Create new file dialog opens and has correct fields', (WidgetTester tester) async {
+  testWidgets('shows the settings destination', (WidgetTester tester) async {
+    await tester.pumpWidget(const MyApp());
+    await tester.pump();
+
+    expect(find.text('设置'), findsWidgets);
+  });
+
+  testWidgets('loads a persisted dark theme', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({
+      'settings_theme_mode': 'dark',
+    });
+
+    await tester.pumpWidget(const MyApp());
+    await tester.pumpAndSettle();
+
+    expect(
+      Theme.of(tester.element(find.byType(MainScreen))).brightness,
+      Brightness.dark,
+    );
+  });
+
+  testWidgets('Create new file dialog opens and has correct fields',
+      (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
     await tester.pump();
 

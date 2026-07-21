@@ -6,4 +6,16 @@ void main() {
     expect(contentChangedSinceSave('before', 'before'), isFalse);
     expect(contentChangedSinceSave('before', 'after'), isTrue);
   });
+
+  test('uses the configured auto-save interval', () {
+    expect(
+      autoSaveDuration(enabled: true, minutes: 1),
+      const Duration(minutes: 1),
+    );
+    expect(autoSaveDuration(enabled: false, minutes: 10), isNull);
+    expect(
+      autoSaveDuration(enabled: true, minutes: 99),
+      const Duration(minutes: 60),
+    );
+  });
 }

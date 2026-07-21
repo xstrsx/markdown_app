@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:typed_data';
-
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import '../models/app_settings.dart';
 import '../models/markdown_file.dart';
 import '../services/file_service.dart';
 import '../services/history_service.dart';
@@ -12,7 +12,12 @@ import '../export/export_html.dart';
 import 'editor_page.dart';
 
 class HistoryPage extends StatefulWidget {
-  const HistoryPage({super.key});
+  final ValueListenable<AppSettings> settingsListenable;
+
+  const HistoryPage({
+    super.key,
+    required this.settingsListenable,
+  });
 
   @override
   State<HistoryPage> createState() => _HistoryPageState();
@@ -49,7 +54,10 @@ class _HistoryPageState extends State<HistoryPage> {
     Navigator.of(context)
         .push(
           MaterialPageRoute(
-            builder: (context) => EditorPage(file: file),
+            builder: (context) => EditorPage(
+              file: file,
+              settingsListenable: widget.settingsListenable,
+            ),
           ),
         )
         .then((_) => _loadHistory());

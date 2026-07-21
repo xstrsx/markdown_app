@@ -1,17 +1,25 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../models/app_settings.dart';
 import '../models/markdown_file.dart';
 import '../services/file_service.dart';
 import '../services/history_service.dart';
 import '../services/pdf_export_service.dart';
+import '../services/settings_service.dart';
 import '../widgets/editor_toolbar.dart';
 import '../widgets/markdown_preview.dart';
 
 bool contentChangedSinceSave(String savedContent, String currentContent) =>
     savedContent != currentContent;
+
+Duration? autoSaveDuration({required bool enabled, required int minutes}) {
+  if (!enabled) return null;
+  return Duration(minutes: SettingsService.normalizeMinutes(minutes));
+}
 
 class EditorPage extends StatefulWidget {
   final MarkdownFile? file;
@@ -20,6 +28,9 @@ class EditorPage extends StatefulWidget {
   final String? initialContentUri;
   final String? initialName;
   final bool exportPdfOnOpen;
+  final bool autoSaveEnabled;
+  final int autoSaveMinutes;
+  final ValueListenable<AppSettings>? settingsListenable;
 
   const EditorPage({
     super.key,
@@ -29,6 +40,9 @@ class EditorPage extends StatefulWidget {
     this.initialContentUri,
     this.initialName,
     this.exportPdfOnOpen = false,
+    this.autoSaveEnabled = true,
+    this.autoSaveMinutes = 1,
+    this.settingsListenable,
   });
 
   @override
@@ -50,6 +64,8 @@ class _EditorPageState extends State<EditorPage>
   Timer? _autoSaveTimer;
   bool _isSaving = false;
   bool _isExportingPdf = false;
+  late bool _autoSaveEnabled;
+  late int _autoSaveMinutes;
 
   @override
   void initState() {
@@ -58,8 +74,32 @@ class _EditorPageState extends State<EditorPage>
     _editorScrollController = ScrollController();
     _previewScrollController = ScrollController();
     _tabController = TabController(length: 2, vsync: this);
+    _autoSaveEnabled = widget.settingsListenable?.value.autoSaveEnabled ??
+        widget.autoSaveEnabled;
+    _autoSaveMinutes = SettingsService.normalizeMinutes(
+      widget.settingsListenable?.value.autoSaveMinutes ??
+          widget.autoSaveMinutes,
+    );
+    widget.settingsListenable?.addListener(_onSettingsChanged);
     _loadInitialFile();
     _setupAutoSave();
+  }
+
+  void _onSettingsChanged() {
+    final settings = widget.settingsListenable?.value;
+    if (settings == null || !mounted) return;
+    final changed = _autoSaveEnabled != settings.autoSaveEnabled ||
+        _autoSaveMinutes != settings.autoSaveMinutes;
+    if (!changed) return;
+
+    setState(() {
+      _autoSaveEnabled = settings.autoSaveEnabled;
+      _autoSaveMinutes = SettingsService.normalizeMinutes(
+        settings.autoSaveMinutes,
+      );
+    });
+    _autoSaveTimer?.cancel();
+    if (_isModified) _scheduleAutoSave();
   }
 
   Future<void> _loadInitialFile() async {
@@ -173,7 +213,11 @@ class _EditorPageState extends State<EditorPage>
 
   void _scheduleAutoSave() {
     _autoSaveTimer?.cancel();
-    _autoSaveTimer = Timer(const Duration(seconds: 30), _autoSave);
+    final duration = autoSaveDuration(
+      enabled: _autoSaveEnabled,
+      minutes: _autoSaveMinutes,
+    );
+    if (duration != null) _autoSaveTimer = Timer(duration, _autoSave);
   }
 
   Future<void> _autoSave() async {
@@ -439,6 +483,7 @@ class _EditorPageState extends State<EditorPage>
   @override
   void dispose() {
     _autoSaveTimer?.cancel();
+    widget.settingsListenable?.removeListener(_onSettingsChanged);
     _textController.dispose();
     _tabController.dispose();
     _editorScrollController.dispose();
